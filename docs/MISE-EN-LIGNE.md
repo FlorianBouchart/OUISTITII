@@ -217,12 +217,21 @@ npm run setup
 
 Elle explique chaque valeur, la demande, et l'enregistre chez Cloudflare.
 
+Au tout premier secret, wrangler demande :
+
+> *There doesn't seem to be a Worker called "ouistitii". Do you want to create
+> a new Worker with that name and add secrets to it?*
+
+**Répondez `Y`** — le Worker n'existe pas encore, il faut bien le créer. (La
+commande `setup` répond d'elle-même ; la question n'apparaît que si vous
+enregistrez les secrets un par un.)
+
 **Ce qu'elle attend, et ce qu'il faut retenir :**
 
 | | Ce qu'on y met | À retenir ? |
 |---|---|---|
 | Clé de signature | rien : elle est tirée au hasard | **non** |
-| Mot de passe de l'espace privé | ce que **vous** choisissez | **oui — le seul** |
+| Mot de passe de l'espace privé | ce que vous choisissez — ou rien, et la commande vous en propose un | **oui — le seul** |
 | Identifiant client Google | copié depuis *Google Cloud → Clients* | non |
 | Code secret Google | copié depuis le même écran | non |
 | Jeton de renouvellement | affiché par `npm run google:token` | non |
