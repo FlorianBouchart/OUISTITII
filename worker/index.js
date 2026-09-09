@@ -20,7 +20,7 @@ export default {
     const url = new URL(request.url);
 
     if (!url.pathname.startsWith('/api/')) {
-      return withSecurityHeaders(await env.ASSETS.fetch(request), env);
+      return withSecurityHeaders(await env.ASSETS.fetch(request), env, url.pathname);
     }
 
     if (request.method === 'OPTIONS') return preflight(request);
@@ -134,8 +134,25 @@ function contentSecurityPolicy(env) {
   ].join('; ');
 }
 
-function withSecurityHeaders(response, env) {
+/**
+ * Politique de cache. Sans elle, une mise à jour n'atteint jamais les
+ * téléphones qui ont déjà ouvert l'application : la page reste celle du
+ * premier jour.
+ *
+ *   les pages  → revalidées à chaque visite, pour que les correctifs arrivent
+ *   le reste   → gardées un an ; leur adresse porte un numéro de version, un
+ *                fichier modifié change donc d'adresse
+ */
+function cachePolicy(pathname) {
+  if (pathname === '/' || pathname.endsWith('.html') || pathname.endsWith('.webmanifest')) {
+    return 'no-cache, must-revalidate';
+  }
+  return 'public, max-age=31536000, immutable';
+}
+
+function withSecurityHeaders(response, env, pathname = '/') {
   const headers = new Headers(response.headers);
+  headers.set('cache-control', cachePolicy(pathname));
   headers.set('content-security-policy', contentSecurityPolicy(env));
   headers.set('x-content-type-options', 'nosniff');
   headers.set('referrer-policy', 'strict-origin-when-cross-origin');
