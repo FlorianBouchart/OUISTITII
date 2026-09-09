@@ -299,13 +299,14 @@ function waitForNetwork() {
 /** Erreurs sans espoir de réussite en réessayant. */
 function isFatal(error) {
   const code = error?.code;
-  if (['unsupported_type', 'content_mismatch', 'file_too_large', 'size_mismatch'].includes(code)) {
+  if (['unsupported_type', 'content_mismatch', 'file_too_large', 'size_mismatch', 'storage_full'].includes(code)) {
     return true;
   }
-  return error?.status === 413 || error?.status === 415;
+  return error?.status === 413 || error?.status === 415 || error?.status === 507;
 }
 
 function friendly(error) {
+  if (error?.code === 'storage_full') return 'Album plein';
   if (error?.code === 'file_too_large') return 'Fichier trop lourd';
   if (error?.code === 'unsupported_type') return 'Format non accepté';
   if (error?.code === 'content_mismatch') return 'Fichier illisible';

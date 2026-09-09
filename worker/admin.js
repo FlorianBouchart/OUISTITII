@@ -95,11 +95,11 @@ export async function listMedia(request, env, url) {
 export async function downloadMedia(request, env, mediaId) {
   await requireAdmin(request, env);
   const row = await env.DB.prepare(
-    'SELECT storage_key, mime, original_name, ext FROM media WHERE id = ?1'
+    'SELECT storage_key, remote_id, mime, original_name, ext FROM media WHERE id = ?1'
   ).bind(mediaId).first();
   if (!row) throw bad('media_unknown', 'Média introuvable.', 404);
 
-  const object = await getObject(env, row.storage_key);
+  const object = await getObject(env, row.storage_key, row.remote_id);
   if (!object) throw bad('media_missing', 'Fichier absent du stockage.', 404);
 
   const filename = row.storage_key.split('/').pop();
@@ -125,8 +125,8 @@ export async function deleteMedia(request, env, mediaId) {
       transport: storageMode(env),
     });
   }
-  await deleteObject(env, row.storage_key);
-  if (row.thumb_key) await deleteObject(env, row.thumb_key).catch(() => {});
+  await deleteObject(env, row.storage_key, row.remote_id);
+  if (row.thumb_key) await deleteObject(env, row.thumb_key, row.remote_thumb).catch(() => {});
 
   const batch = [env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(mediaId)];
   if (row.status === 'stored') {
@@ -184,7 +184,7 @@ export async function cleanupStale(request, env) {
   await requireAdmin(request, env);
   const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   const { results } = await env.DB.prepare(
-    `SELECT id, storage_key, thumb_key, upload_id FROM media
+    `SELECT id, storage_key, thumb_key, remote_id, remote_thumb, upload_id FROM media
       WHERE status IN ('pending','uploading','failed') AND created_at < ?1 LIMIT 200`
   ).bind(cutoff).all();
 
@@ -196,8 +196,8 @@ export async function cleanupStale(request, env) {
         transport: storageMode(env),
       });
     }
-    await deleteObject(env, row.storage_key).catch(() => {});
-    if (row.thumb_key) await deleteObject(env, row.thumb_key).catch(() => {});
+    await deleteObject(env, row.storage_key, row.remote_id).catch(() => {});
+    if (row.thumb_key) await deleteObject(env, row.thumb_key, row.remote_thumb).catch(() => {});
     await env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(row.id).run();
   }
   return json({ ok: true, cleaned: results.length });

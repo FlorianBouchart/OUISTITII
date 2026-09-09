@@ -38,9 +38,30 @@ PART_SIZE_MB = "8"
 # de fermer l'album — auquel cas la date s'affichera d'elle-même.
 AVAILABLE_UNTIL = ""
 
-# Secrets à définir avec `npx wrangler secret put <NOM>` — jamais dans ce fichier :
-#   S3_ACCESS_KEY_ID       — clé d'API R2 (Object Read & Write)
-#   S3_SECRET_ACCESS_KEY   — secret associé
-#   S3_ENDPOINT            — https://<account_id>.r2.cloudflarestorage.com
+# ═══ LE VERROU ═══════════════════════════════════════════════════
+# Plafond de stockage, en gigaoctets. Au-delà, l'application REFUSE tout
+# nouvel envoi : l'album reste consultable et téléchargeable, mais plus rien
+# n'entre. C'est ce qui garantit qu'aucune facture ne peut apparaître.
+#
+# Réglé sous les 15 Go offerts par Google Drive, avec une marge : une vidéo
+# peut peser plusieurs centaines de mégaoctets, et le dernier envoi ne doit
+# jamais faire basculer le compte au-delà du gratuit.
+STORAGE_LIMIT_GB = "13.5"
+
+# Où atterrissent les souvenirs, si le dossier ne doit pas être à la racine
+# du Drive. Laisser vide pour la racine.
+GOOGLE_FOLDER_ID = ""
+
+# Secrets à définir avec `npx wrangler secret put <NOM>` — jamais dans ce fichier.
+#
+# Pour le Google Drive des mariés (option retenue, 15 Go offerts, 0 €) :
+#   GOOGLE_CLIENT_ID       — identifiant OAuth du projet Google
+#   GOOGLE_CLIENT_SECRET   — secret associé
+#   GOOGLE_REFRESH_TOKEN   — jeton de renouvellement obtenu une seule fois
+#
+# Pour un stockage objet compatible S3 (autre option, payante au-delà de 10 Go) :
+#   S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_ENDPOINT
+#
+# Dans tous les cas :
 #   TOKEN_SECRET           — chaîne aléatoire (signature des jetons invité)
 #   ADMIN_PASSWORD         — mot de passe de l'espace des mariés

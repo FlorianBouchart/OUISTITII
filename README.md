@@ -258,37 +258,70 @@ restent sans limite de durée.
 
 ---
 
-## 3. Le stockage : pourquoi Cloudflare R2
+## 3. Le stockage : le Drive des mariés, et zéro euro
 
-Hypothèse retenue : **2 000 médias, ~35 Go**, dont 300 à 500 vidéos (une vidéo de
-30 s en 4K pèse déjà 180 Mo). Marge haute : 80 Go.
+**Contrainte posée : aucune dépense.** Pas « peu cher » — zéro. Cela a écarté
+les stockages objet, qui offrent tous une tranche gratuite mais réclament une
+carte bancaire à l'activation et facturent automatiquement au dépassement.
 
-| | R2 *(retenu)* | Google Cloud Storage | Supabase Storage |
-|---|---|---|---|
-| Stockage 50 Go | ~0,60 $/mois (10 Go offerts) | ~1,00 $/mois | Plan gratuit limité à 1 Go → **Pro à 25 $/mois** |
-| **Récupérer les 35 Go** | **0 $** | ~4 $ à chaque fois | inclus |
-| Écritures | 1 M/mois offertes | facturées | incluses |
-| Fichiers lourds | envoi fractionné S3 | envoi repranable | TUS au-delà de 6 Mo |
-| Mise en place | un compte, deux commandes | projet + IAM + compte de service | rapide |
-| Front + API + base | **le même fournisseur** | à assembler | Postgres inclus, front ailleurs |
+**La solution retenue : le Google Drive des mariés.** Quinze gigaoctets sont
+offerts avec n'importe quel compte Google, sans carte bancaire, sans compte à
+créer ailleurs — et les souvenirs atterrissent dans un espace que les mariés
+possèdent déjà et savent utiliser.
 
-Ce qui a tranché :
+### Le verrou
 
-1. **Sortie de données gratuite.** Les mariés vont rapatrier plusieurs dizaines de
-   gigaoctets, sans doute plusieurs fois (tri, sauvegarde, montage vidéo). Chez les
-   autres, chaque copie complète se paie.
-2. **Une seule pièce à administrer.** Le Worker sert l'application, l'API, la base et
-   le stockage : un `wrangler deploy`, un domaine, aucun problème d'origine croisée.
-3. **Aucun enfermement.** R2 parle le protocole S3 : `rclone`, Cyberduck ou n'importe
-   quel outil S3 lit le bucket tel quel. Changer de fournisseur = changer trois
-   variables d'environnement, le code de signature est standard.
-4. **Le coût réel tourne autour d'un euro par mois**, et retombe à zéro une fois les
-   souvenirs archivés — un projet de mariage n'a pas à porter un abonnement.
+Quinze gigaoctets ne sont pas infinis. L'application refuse donc tout nouvel
+envoi au-delà de `STORAGE_LIMIT_GB` (réglé à **13,5 Go**, une marge sous les
+quinze pour qu'une dernière vidéo ne fasse jamais basculer le compte).
 
-Supabase aurait apporté un tableau de bord tout prêt, mais son plan gratuit (1 Go)
-ne tient pas face à 35 Go, et 25 $/mois pour un événement d'un jour n'est pas
-raisonnable. Google Cloud Storage est solide mais facture la sortie et demande un
-assemblage nettement plus lourd.
+Ce que le verrou fait, et ne fait pas :
+
+| | |
+|---|---|
+| Ajouter des souvenirs | **bloqué** au-delà du plafond, message explicite, entrées désactivées |
+| Consulter l'album | reste ouvert |
+| Enregistrer sur son téléphone | reste possible |
+| Facturation | **impossible** : rien ne peut être écrit au-delà du gratuit |
+
+Le total additionne les envois terminés *et* ceux en cours : dix téléphones qui
+déposent en même temps ne peuvent pas franchir le plafond ensemble.
+
+### Comment les fichiers arrivent chez Google
+
+Le Worker ouvre une « session d'envoi reprenable » avec ses identifiants, puis
+les octets montent **par tranches de 8 Mo**. Chaque tranche est placée à son
+octet exact : une session interrompue redémarre où elle en était, sans
+recommencer le fichier.
+
+Les identifiants Google ne quittent jamais le Worker. Le navigateur ne voit
+qu'une adresse de session, valable pour un seul fichier.
+
+Le portée demandée est `drive.file` : **l'application ne voit que les fichiers
+qu'elle a elle-même déposés**. Elle ne peut ni lire, ni modifier, ni supprimer
+quoi que ce soit d'autre dans le Drive.
+
+### L'arborescence dans le Drive
+
+```
+OUISTITII/
+  Photos/
+    Marie Dupont/       20261212-201455__a1b2c3d4__IMG_4821.jpg
+    Jean-Baptiste Le Roy/
+  Videos/
+    Marie Dupont/
+  Apercus/              les vignettes de l'album
+```
+
+### Si un jour quinze gigaoctets ne suffisent plus
+
+Le code garde son pilote pour un stockage objet compatible S3 (Cloudflare R2,
+Backblaze, Scaleway…) : renseigner `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` et
+`S3_ENDPOINT` suffit à basculer, sans toucher au reste. Compter alors environ
+0,50 $ par mois pour 35 Go — mais c'est une décision, pas un automatisme.
+
+**Durée de conservation : aucune.** Rien n'expire, aucune suppression n'est
+programmée nulle part dans le code.
 
 ---
 
@@ -336,31 +369,48 @@ L'espace des mariés : `http://localhost:5185/admin.html`
 
 ### Production
 
+**Étape 1 — autoriser l'application sur le Drive** (à faire une seule fois)
+
+1. Ouvrir [console.cloud.google.com](https://console.cloud.google.com), créer un
+   projet (gratuit, aucune carte demandée).
+2. *API et services → Bibliothèque* → activer **Google Drive API**.
+3. *Écran de consentement OAuth* → type **Externe** → renseigner le nom de
+   l'application et un e-mail de contact → ajouter la portée
+   `.../auth/drive.file` → s'ajouter comme **utilisateur de test**.
+   L'application reste en mode test : aucune vérification Google n'est requise,
+   puisque le seul compte concerné est celui des mariés.
+4. *Identifiants → Créer → ID client OAuth → Application de bureau*.
+   Noter l'identifiant et le secret.
+5. Obtenir le jeton de renouvellement :
+
 ```bash
-# 1. Une fois : créer les ressources
-npx wrangler login
-npm run bucket:create
+npm run google:token -- <CLIENT_ID> <CLIENT_SECRET>
+```
+
+Une page Google s'ouvre, on autorise, le jeton s'affiche dans le terminal.
+
+**Étape 2 — mettre en ligne**
+
+```bash
+npx wrangler login                 # compte Cloudflare (Workers et D1 : gratuits)
 npm run db:create                  # reporter l'`database_id` dans wrangler.toml
-npm run db:migrate:remote
 
-# 2. Les secrets (jamais dans un fichier versionné)
-npx wrangler secret put TOKEN_SECRET          # une longue chaîne aléatoire
-npx wrangler secret put ADMIN_PASSWORD        # le mot de passe des mariés
-npx wrangler secret put S3_ACCESS_KEY_ID      # jeton d'API R2, droits « Object Read & Write »
-npx wrangler secret put S3_SECRET_ACCESS_KEY
-npx wrangler secret put S3_ENDPOINT           # https://<account_id>.r2.cloudflarestorage.com
+npx wrangler secret put TOKEN_SECRET           # une longue chaîne aléatoire
+npx wrangler secret put ADMIN_PASSWORD         # le mot de passe des mariés
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+npx wrangler secret put GOOGLE_REFRESH_TOKEN
 
-# 3. Autoriser le navigateur à écrire dans le bucket
-#    (adapter les origines dans r2-cors.json avant)
-npm run bucket:cors
-
-# 4. En ligne
 npm run deploy
 ```
 
-Le jeton d'API R2 se crée dans le tableau de bord Cloudflare :
-**R2 → Manage R2 API Tokens → Create token → Object Read & Write**, limité au bucket
-`ouistitii-medias`.
+La base se crée d'elle-même au premier appel : aucune migration à lancer.
+
+> **GitHub Pages ne convient pas.** Pages ne sert que des fichiers figés, or
+> l'application a besoin d'un serveur pour réserver un envoi, écrire dans le
+> Drive et vérifier les permissions. C'est le Worker Cloudflare qui sert à la
+> fois l'application et son API — et son plan gratuit (100 000 requêtes par
+> jour) est très au-delà des besoins d'un mariage.
 
 ### Variables et secrets
 
@@ -368,9 +418,11 @@ Le jeton d'API R2 se crée dans le tableau de bord Cloudflare :
 |---|---|---|
 | `TOKEN_SECRET` | secret | signature des sessions invité |
 | `ADMIN_PASSWORD` | secret | accès à `/admin.html` |
-| `S3_ACCESS_KEY_ID` | secret | jeton d'API R2 |
-| `S3_SECRET_ACCESS_KEY` | secret | jeton d'API R2 |
-| `S3_ENDPOINT` | secret | `https://<account_id>.r2.cloudflarestorage.com` |
+| `GOOGLE_CLIENT_ID` | secret | identifiant OAuth du projet Google |
+| `GOOGLE_CLIENT_SECRET` | secret | secret associé |
+| `GOOGLE_REFRESH_TOKEN` | secret | obtenu par `npm run google:token` |
+| `STORAGE_LIMIT_GB` | `wrangler.toml` | **le verrou** — plafond au-delà duquel plus rien n'entre (13,5) |
+| `S3_*` | secret | seulement si l'on bascule un jour sur un stockage objet |
 | `MAX_FILE_MB` | `wrangler.toml` | taille maximale par fichier (600) |
 | `PART_SIZE_MB` | `wrangler.toml` | taille d'une partie (8) |
 | `EVENT_DATE` / `EVENT_PREFIX` | `wrangler.toml` | racine des chemins de stockage |
@@ -381,14 +433,12 @@ lourdes y perdent en confort.
 
 ### Récupérer les souvenirs après le mariage
 
-```bash
-# Le manifeste (qui a envoyé quoi) : bouton « Manifeste CSV » dans /admin.html
-# Tout le bucket, en une commande :
-rclone sync r2:ouistitii-medias ./souvenirs-mariage --progress
-```
+Les souvenirs sont déjà dans le Drive des mariés, rangés par type puis par
+invité : il suffit d'ouvrir le dossier `OUISTITII`, ou de le synchroniser sur un
+ordinateur avec Google Drive pour ordinateur.
 
-L'arborescence est déjà triée : `mariage/2026-12-12/photos/<invité>/…` et
-`…/videos/<invité>/…`.
+Le bouton « Manifeste CSV » de `/admin.html` donne la table complète — qui a
+envoyé quoi, quand, et sous quel nom de fichier.
 
 ---
 

@@ -36,6 +36,9 @@ export const SCHEMA = [
      source         TEXT NOT NULL DEFAULT 'gallery' CHECK (source IN ('camera','gallery')),
      taken_at       TEXT,
      thumb_key      TEXT,
+     remote_id      TEXT,                      -- identifiant du fichier chez l'hébergeur
+     remote_thumb   TEXT,
+     session_url    TEXT,                      -- session d'envoi en cours
      width          INTEGER,
      height         INTEGER,
      duration       REAL,
@@ -73,6 +76,9 @@ export const SCHEMA = [
  */
 const MEDIA_COLUMNS = {
   thumb_key: 'TEXT',
+  remote_id: 'TEXT',
+  remote_thumb: 'TEXT',
+  session_url: 'TEXT',
   width: 'INTEGER',
   height: 'INTEGER',
   duration: 'REAL',

@@ -16,9 +16,60 @@ import { issueGuestToken, requireGuest, sessionCookie } from './auth.js';
 import {
   storageMode, beginUpload, signPartUrls, finishUpload, abortUpload,
   relayPut, relayPart, headObject, getObject, deleteObject, partSizeOf, multipartThreshold,
+  driveChunk, putThumbObject,
 } from './storage.js';
 
 const maxFileBytes = (env) => Number(env.MAX_FILE_MB || 600) * 1024 * 1024;
+
+/** Plafond de stockage, au-delà duquel plus rien n'entre. 0 = pas de plafond. */
+const storageLimit = (env) => Number(env.STORAGE_LIMIT_GB || 0) * 1024 * 1024 * 1024;
+
+/**
+ * Ce qui est déjà stocké, tout contributeur confondu.
+ * On additionne aussi ce qui est en cours d'envoi : sans cela, dix téléphones
+ * qui déposent en même temps pourraient franchir le plafond ensemble.
+ */
+async function usedBytes(env) {
+  const row = await env.DB.prepare(
+    `SELECT COALESCE(SUM(COALESCE(stored_size, size)), 0) AS total
+       FROM media WHERE status IN ('stored','uploading','pending')`
+  ).first();
+  return Number(row?.total || 0);
+}
+
+/**
+ * Le verrou. Il ne s'agit pas d'une optimisation : c'est la garantie qu'aucune
+ * facture ne peut apparaître. L'album reste consultable et téléchargeable —
+ * seuls les nouveaux envois sont refusés.
+ */
+async function assertRoom(env, incoming) {
+  const limit = storageLimit(env);
+  if (!limit) return;
+
+  const used = await usedBytes(env);
+  if (used + incoming <= limit) return;
+
+  throw bad(
+    'storage_full',
+    'L’album a atteint sa capacité : les souvenirs déjà envoyés restent ' +
+      'consultables et téléchargeables, mais il n’est plus possible d’en ajouter. ' +
+      'Prévenez les mariés, ils feront de la place.',
+    507
+  );
+}
+
+/** État du stockage, pour l'afficher aux mariés et prévenir avant le plafond. */
+export async function storageState(env) {
+  const limit = storageLimit(env);
+  const used = await usedBytes(env);
+  return {
+    used,
+    limit,
+    free: limit ? Math.max(limit - used, 0) : null,
+    ratio: limit ? Math.min(used / limit, 1) : 0,
+    full: limit ? used >= limit : false,
+  };
+}
 
 /* ═══════════════════════════════════════════════════════════════
    1. SESSION — prénom + nom, rien de plus
@@ -75,6 +126,7 @@ export async function openSession(request, env) {
         transport: storageMode(env),
         acceptedTypes: 'image/*,video/*',
         availableUntil: env.AVAILABLE_UNTIL || null,
+        storage: await storageState(env),
       },
     },
     200,
@@ -132,6 +184,7 @@ export async function initUpload(request, env) {
   }
 
   await rateLimit(env.DB, 'init', cid, 400, 600);
+  await assertRoom(env, size);
 
   const contributor = await env.DB.prepare(
     'SELECT id, slug, display_name FROM contributors WHERE id = ?1'
@@ -165,21 +218,24 @@ export async function initUpload(request, env) {
   const mediaId = uuid();
   const key = buildKey(env, { contributor, kind, ext, mediaId, name: body.name, takenAt: body.takenAt });
 
-  const upload = await beginUpload(env, { key, contentType: mime, size });
+  const upload = await beginUpload(env, {
+    key, contentType: mime, size, kind, contributor,
+  });
 
   await env.DB.prepare(
     `INSERT INTO media
        (id, contributor_id, session_id, kind, mime, ext, size, original_name, storage_key,
         fingerprint, source, taken_at, width, height, duration,
-        status, upload_id, part_size, parts_total, created_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,'pending',?16,?17,?18,?19)`
+        status, upload_id, part_size, parts_total, session_url, created_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,'pending',?16,?17,?18,?19,?20)`
   ).bind(
     mediaId, cid, sid, kind, mime, ext, size,
     String(body.name || '').slice(0, 160), key, fingerprint,
     body.source === 'camera' ? 'camera' : 'gallery',
     body.takenAt ? String(body.takenAt).slice(0, 40) : null,
     posInt(body.width), posInt(body.height), posNum(body.duration),
-    upload.uploadId || null, upload.partSize || null, upload.partsTotal || null, nowISO()
+    upload.uploadId || null, upload.partSize || null, upload.partsTotal || null,
+    upload.sessionUrl || null, nowISO()
   ).run();
 
   return json({
@@ -286,7 +342,8 @@ export async function completeUpload(request, env, mediaId) {
         .filter((p) => p.partNumber >= 1 && p.etag)
     : [];
 
-  if (row.upload_id) {
+  // Drive assemble lui-même à mesure : il n'y a rien à recomposer.
+  if (row.upload_id && !row.session_url) {
     if (parts.length !== row.parts_total) {
       throw bad('parts_missing', 'L’envoi est incomplet — il va reprendre tout seul.', 409);
     }
@@ -299,13 +356,14 @@ export async function completeUpload(request, env, mediaId) {
   }
 
   // Le client annonce une taille ; c'est le stockage qui tranche.
-  const head = await headObject(env, row.storage_key);
+  const fresh = await env.DB.prepare('SELECT remote_id FROM media WHERE id = ?1').bind(mediaId).first();
+  const head = await headObject(env, row.storage_key, fresh?.remote_id);
   if (!head) {
     await markFailed(env, mediaId, 'objet absent après clôture');
     throw bad('upload_incomplete', 'L’envoi n’est pas allé au bout. Réessayez.', 409);
   }
   if (head.size > maxFileBytes(env) || (row.size && Math.abs(head.size - row.size) > 1024)) {
-    await deleteObject(env, row.storage_key);
+    await deleteObject(env, row.storage_key, fresh?.remote_id);
     await env.DB.prepare(
       `UPDATE media SET status='rejected', error='taille inattendue', stored_size=?2 WHERE id=?1`
     ).bind(mediaId, head.size).run();
@@ -314,7 +372,8 @@ export async function completeUpload(request, env, mediaId) {
 
   await env.DB.batch([
     env.DB.prepare(
-      `UPDATE media SET status='stored', stored_size=?2, completed_at=?3, upload_id=NULL, error=NULL
+      `UPDATE media SET status='stored', stored_size=?2, completed_at=?3,
+              upload_id=NULL, session_url=NULL, error=NULL
         WHERE id=?1`
     ).bind(mediaId, head.size, nowISO()),
     env.DB.prepare(
@@ -364,6 +423,31 @@ export async function relayUpload(request, env, mediaId, partNumber) {
   await env.DB.prepare(`UPDATE media SET status='uploading' WHERE id=?1 AND status='pending'`)
     .bind(mediaId).run();
 
+  // Vers Google Drive : chaque tranche est placée à son octet exact. Google
+  // répond 308 tant qu'il en attend, et livre l'identifiant du fichier à la
+  // dernière. Les octets traversent le Worker par tranches de quelques mégas,
+  // bien au-dessous de toutes les limites du plan gratuit.
+  if (row.session_url) {
+    const n = Math.max(Number(partNumber) || 1, 1);
+    const partSize = row.part_size || multipartThreshold(env);
+    const start = (n - 1) * partSize;
+    const end = Math.min(start + partSize, row.size) - 1;
+
+    const result = await driveChunk(env, {
+      sessionUrl: row.session_url,
+      body: request.body,
+      start,
+      end,
+      total: row.size,
+    });
+
+    if (result.done) {
+      await env.DB.prepare('UPDATE media SET remote_id = ?2 WHERE id = ?1')
+        .bind(mediaId, result.id).run();
+    }
+    return json({ etag: result.id || `part-${n}`, partNumber: n, done: result.done });
+  }
+
   if (row.upload_id) {
     const n = Number(partNumber);
     if (!Number.isInteger(n) || n < 1 || n > row.parts_total) {
@@ -409,12 +493,16 @@ export async function putThumb(request, env, mediaId) {
   if (row.thumb_key) throw bad('thumb_locked', 'Cet aperçu est déjà enregistré.', 409);
 
   const key = `${env.EVENT_PREFIX || 'mariage'}/${env.EVENT_DATE || '2026-12-12'}/apercus/${mediaId}.jpg`;
-  const object = await env.MEDIA.put(key, request.body, {
-    httpMetadata: { contentType: 'image/jpeg' },
+  const saved = await putThumbObject(env, {
+    key,
+    body: request.body,
+    contentType: 'image/jpeg',
+    kind: row.kind,
   });
-  if (!object) throw bad('thumb_failed', 'Aperçu non enregistré.', 500);
+  if (!saved.ok) throw bad('thumb_failed', 'Aperçu non enregistré.', 500);
 
-  await env.DB.prepare('UPDATE media SET thumb_key = ?2 WHERE id = ?1').bind(mediaId, key).run();
+  await env.DB.prepare('UPDATE media SET thumb_key = ?2, remote_thumb = ?3 WHERE id = ?1')
+    .bind(mediaId, key, saved.id || null).run();
   return json({ ok: true });
 }
 
@@ -486,14 +574,16 @@ export async function serveMedia(request, env, mediaId, variant) {
   });
 
   const row = await env.DB.prepare(
-    `SELECT storage_key, thumb_key, mime, status FROM media WHERE id = ?1`
+    `SELECT storage_key, thumb_key, remote_id, remote_thumb, mime, status
+       FROM media WHERE id = ?1`
   ).bind(mediaId).first();
   if (!row || row.status !== 'stored') throw bad('media_unknown', 'Souvenir introuvable.', 404);
 
   const wantsThumb = variant === 'thumb' && row.thumb_key;
   const key = wantsThumb ? row.thumb_key : row.storage_key;
+  const remote = wantsThumb ? row.remote_thumb : row.remote_id;
 
-  const object = await getObject(env, key);
+  const object = await getObject(env, key, remote);
   if (!object) throw bad('media_missing', 'Fichier absent.', 404);
 
   const headers = new Headers();
@@ -532,8 +622,8 @@ export async function deleteOwnMedia(request, env, mediaId) {
     );
   }
 
-  await deleteObject(env, row.storage_key).catch(() => {});
-  if (row.thumb_key) await deleteObject(env, row.thumb_key).catch(() => {});
+  await deleteObject(env, row.storage_key, row.remote_id).catch(() => {});
+  if (row.thumb_key) await deleteObject(env, row.thumb_key, row.remote_thumb).catch(() => {});
 
   const batch = [env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(mediaId)];
   if (row.status === 'stored') {

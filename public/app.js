@@ -89,6 +89,7 @@ function paintScreen(name) {
     onNameInput();
   }
   if (name === 'gallery') loadGallery({ reset: true });
+  if (name === 'add') paintStorageState();
   if (name === 'done') drawSeal($('#done-seal-svg'));
 
   // L'onglet suit l'écran affiché.
@@ -273,6 +274,33 @@ for (const input of Object.values(inputs)) {
     if (!files.length) return;
     await addFiles(files, source);
   });
+}
+
+/**
+ * Quand l'album est plein, on ne laisse pas l'invité choisir des photos pour
+ * les voir refusées une par une : les entrées se ferment et on le dit d'emblée.
+ * Consulter et enregistrer restent possibles, eux.
+ */
+function paintStorageState() {
+  const storage = state.guest?.config?.storage;
+  const full = storage?.full === true;
+
+  for (const id of ['#btn-photo', '#btn-video', '#btn-gallery']) {
+    const button = $(id);
+    if (button) {
+      button.disabled = full;
+      button.style.opacity = full ? '.45' : '';
+      button.style.pointerEvents = full ? 'none' : '';
+    }
+  }
+
+  if (full) {
+    notice(
+      el.addError,
+      'L’album a atteint sa capacité : on ne peut plus y ajouter de souvenirs. ' +
+        'Ceux qui sont arrivés restent visibles, et vous pouvez toujours les enregistrer.'
+    );
+  }
 }
 
 /* ─── Constitution de la file ──────────────────────────────────── */
