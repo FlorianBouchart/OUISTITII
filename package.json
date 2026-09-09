@@ -1,0 +1,21 @@
+{
+  "name": "ouistitii-par-tf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OUISTITII par T&F — l'application photo et vidéo du mariage de Thomy & Florian",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 5185",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute ouistitii --local --file=schema.sql",
+    "db:migrate:remote": "wrangler d1 execute ouistitii --remote --file=schema.sql",
+    "bucket:create": "wrangler r2 bucket create ouistitii-medias && wrangler r2 bucket create ouistitii-medias-dev",
+    "bucket:cors": "wrangler r2 bucket cors put ouistitii-medias --file r2-cors.json",
+    "db:create": "wrangler d1 create ouistitii",
+    "tail": "wrangler tail",
+    "verify": "node scripts/verify-signature.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.130.0"
+  }
+}

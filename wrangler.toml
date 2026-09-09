@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════
+# OUISTITII par T&F — Cloudflare Worker (API + front statique)
+# ═══════════════════════════════════════════════════════════════
+name = "ouistitii"
+main = "worker/index.js"
+compatibility_date = "2026-01-15"
+workers_dev = true
+
+# Le Worker sert aussi le front : un seul domaine, aucun CORS entre l'app et l'API.
+[assets]
+directory = "public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Stockage des médias — bucket PRIVÉ (aucun accès public).
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "ouistitii-medias"
+preview_bucket_name = "ouistitii-medias-dev"
+
+# Métadonnées (contributeurs, médias, statuts).
+[[d1_databases]]
+binding = "DB"
+database_name = "ouistitii"
+database_id = "REMPLACER_PAR_L_ID_D1"
+
+[vars]
+EVENT_DATE   = "2026-12-12"
+EVENT_PREFIX = "mariage"
+# Taille max par fichier (Mo). Une vidéo 4K d'une minute pèse ~350 Mo.
+MAX_FILE_MB  = "600"
+# Au-delà de ce seuil (Mo) on bascule en upload multipart repranable.
+MULTIPART_THRESHOLD_MB = "8"
+PART_SIZE_MB = "8"
+
+# Secrets à définir avec `npx wrangler secret put <NOM>` — jamais dans ce fichier :
+#   S3_ACCESS_KEY_ID       — clé d'API R2 (Object Read & Write)
+#   S3_SECRET_ACCESS_KEY   — secret associé
+#   S3_ENDPOINT            — https://<account_id>.r2.cloudflarestorage.com
+#   TOKEN_SECRET           — chaîne aléatoire (signature des jetons invité)
+#   ADMIN_PASSWORD         — mot de passe de l'espace des mariés

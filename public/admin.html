@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OUISTITII — l’album de Thomy &amp; Florian</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="assets/logo-mark.png">
+<link rel="stylesheet" href="app.css?v=1">
+<link rel="stylesheet" href="admin.css?v=1">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <path d="M6 6l12 12M18 6 6 18"/>
+    </symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M12 7.6v5.2M12 16.2h.01"/>
+    </symbol>
+    <symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2.6" y="6.4" width="13" height="11.2" rx="1.6"/><path d="M15.6 10.6 21.4 7.6v8.8l-5.8-3z"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 4v11M7.5 11l4.5 4.5 4.5-4.5M4.5 19.5h15"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <div class="toile" aria-hidden="true"></div>
+
+  <!-- ═══ MOT DE PASSE ═══════════════════════════════════════ -->
+  <section class="screen active" id="screen-login">
+    <div class="sheet" style="max-width:420px">
+      <div class="sheet-head">
+        <img src="assets/logo-navy.png" alt="" width="64" height="64" style="margin:0 auto 1rem">
+        <span class="eyebrow">Réservé aux mariés</span>
+        <h1 class="title">L’album</h1>
+        <div class="rule" aria-hidden="true"><span class="line"></span><span class="lozenge"></span><span class="line"></span></div>
+      </div>
+
+      <form id="form-login">
+        <div class="notice notice-alert" id="login-error" role="alert" hidden>
+          <svg aria-hidden="true"><use href="#i-alert"></use></svg><span></span>
+        </div>
+        <div class="field">
+          <label class="field-label" for="password">Mot de passe</label>
+          <input type="password" id="password" autocomplete="current-password" enterkeyhint="go" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Entrer</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ═══ TABLEAU ════════════════════════════════════════════ -->
+  <section class="screen" id="screen-board">
+    <header class="topbar">
+      <div class="topbar-mark">
+        <img src="assets/logo-navy.png" alt="" width="34" height="34">
+        <span class="topbar-title">L’ALBUM</span>
+      </div>
+      <button class="topbar-swap" id="btn-logout">Fermer</button>
+    </header>
+
+    <div class="sheet" style="max-width:1100px">
+      <div class="stats" id="stats"></div>
+
+      <div class="board-actions">
+        <a class="btn btn-outline btn-sm" id="link-csv" href="/api/admin/export.csv" download>
+          <svg aria-hidden="true"><use href="#i-download"></use></svg> Manifeste CSV
+        </a>
+        <button class="btn btn-outline btn-sm" id="btn-cleanup">Nettoyer les envois abandonnés</button>
+      </div>
+
+      <h2 class="title-sm" style="margin:2rem 0 .8rem">Par contributeur</h2>
+      <div class="table-wrap">
+        <table class="table" id="table-contributors">
+          <thead><tr><th>Invité</th><th>Photos</th><th>Vidéos</th><th>Poids</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <h2 class="title-sm" style="margin:2.2rem 0 .8rem">Les souvenirs</h2>
+      <div class="filters">
+        <select id="filter-kind" aria-label="Type de média">
+          <option value="">Tout</option>
+          <option value="photo">Photos</option>
+          <option value="video">Vidéos</option>
+        </select>
+        <select id="filter-contributor" aria-label="Contributeur"><option value="">Tous les invités</option></select>
+        <select id="filter-status" aria-label="État">
+          <option value="stored">Arrivés</option>
+          <option value="failed">En échec</option>
+          <option value="uploading">En cours</option>
+          <option value="pending">En attente</option>
+          <option value="rejected">Refusés</option>
+        </select>
+      </div>
+
+      <div class="grid" id="media-grid"></div>
+      <div class="more-wrap">
+        <button class="btn btn-outline btn-sm" id="btn-more" hidden>Afficher la suite</button>
+        <p class="lede" id="empty-note" hidden>Aucun souvenir pour ces critères.</p>
+      </div>
+    </div>
+
+    <footer class="foot">
+      <span class="foot-script script">Thomy &amp; Florian</span>
+      <span class="foot-date">12 · XII · MMXXVI</span>
+    </footer>
+  </section>
+</div>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <h3 class="title-sm" id="modal-title">Supprimer</h3>
+    <p class="modal-text" id="modal-text"></p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="modal-cancel">Annuler</button>
+      <button class="btn btn-primary" id="modal-confirm">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<script src="admin.js?v=1" type="module"></script>
+</body>
+</html>

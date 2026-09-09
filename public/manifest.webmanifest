@@ -1,0 +1,15 @@
+{
+  "name": "OUISTITII par T&F",
+  "short_name": "OUISTITII",
+  "description": "Les photos et vidéos du mariage de Thomy & Florian, le 12 décembre 2026.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#C2D0E1",
+  "theme_color": "#FAF5EF",
+  "lang": "fr",
+  "icons": [
+    { "src": "assets/logo-mark.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
