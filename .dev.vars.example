@@ -1,8 +1,16 @@
 # Copier en `.dev.vars` pour le développement local (fichier ignoré par git).
-# Sans clés S3, l'app bascule automatiquement en mode "relais" : les fichiers
-# transitent par le Worker et atterrissent dans le bucket R2 local de Wrangler.
-TOKEN_SECRET=dev-secret-a-remplacer
-ADMIN_PASSWORD=ouistitii
+#
+# Ces valeurs ne servent QU'EN LOCAL. En production, les secrets se posent avec
+# `npx wrangler secret put <NOM>` et ne passent jamais par un fichier.
+#
+# ⚠️ Ce dépôt est public : ne jamais reprendre tel quel le mot de passe
+# ci-dessous. Celui de l'espace des mariés doit être choisi par eux.
+
+TOKEN_SECRET=chaine-aleatoire-a-remplacer
+ADMIN_PASSWORD=mot-de-passe-a-choisir
+
+# Sans clés S3, l'application bascule d'elle-même en mode « relais » : les
+# fichiers transitent par le Worker et atterrissent dans le bucket R2 local.
 # S3_ACCESS_KEY_ID=
 # S3_SECRET_ACCESS_KEY=
 # S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com

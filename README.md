@@ -246,9 +246,15 @@ cinq fois, avec l'avancement affiché.
 Pour tout récupérer d'un coup après le mariage, les mariés disposent de leur
 propre chemin (§5) : `rclone` sur le bucket, et le manifeste CSV.
 
-**Durée de conservation** : `AVAILABLE_UNTIL` dans `wrangler.toml` fixe la date
-annoncée aux invités dans l'album. C'est une information affichée, pas une
-suppression automatique : rien n'est jamais effacé sans une décision des mariés.
+**Durée de conservation : aucune.** R2 garde les fichiers tant que le compte
+existe — il n'y a ni expiration, ni quota de temps, ni suppression automatique
+nulle part dans le code. Compter environ 0,60 $ par mois pour 35 Go, et rien du
+tout une fois les souvenirs archivés ailleurs et le bucket vidé.
+
+`AVAILABLE_UNTIL` (vide par défaut) sert uniquement si les mariés décidaient un
+jour de fermer l'album : la date renseignée s'afficherait alors aux invités.
+Tant qu'elle est vide, l'application annonce l'inverse — que les souvenirs
+restent sans limite de durée.
 
 ---
 

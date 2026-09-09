@@ -32,10 +32,11 @@ MAX_FILE_MB  = "600"
 # Au-delà de ce seuil (Mo) on bascule en upload multipart repranable.
 MULTIPART_THRESHOLD_MB = "8"
 PART_SIZE_MB = "8"
-# Jusqu'à quand les invités peuvent revenir chercher leurs souvenirs.
-# C'est une information affichée, pas une suppression automatique : rien n'est
-# jamais effacé sans une décision des mariés.
-AVAILABLE_UNTIL = "2027-12-12"
+# Date de fin de mise à disposition, ANNONCÉE aux invités dans l'album.
+# Laissée vide : rien n'expire, rien n'est supprimé automatiquement, et le
+# stockage n'a pas d'échéance. À ne remplir que si les mariés décident un jour
+# de fermer l'album — auquel cas la date s'affichera d'elle-même.
+AVAILABLE_UNTIL = ""
 
 # Secrets à définir avec `npx wrangler secret put <NOM>` — jamais dans ce fichier :
 #   S3_ACCESS_KEY_ID       — clé d'API R2 (Object Read & Write)

@@ -795,8 +795,8 @@ function paintKeepsafe() {
     : null;
 
   node.innerHTML = date
-    ? `Vos souvenirs restent ici jusqu’au <b>${date}</b>. Vous pouvez revenir les chercher quand vous voulez — touchez une photo, ou appuyez longuement pour en choisir plusieurs.`
-    : 'Touchez une photo pour la revoir, ou appuyez longuement pour en choisir plusieurs et les enregistrer.';
+    ? `L’album reste ouvert jusqu’au <b>${date}</b>. Touchez une photo pour la revoir, ou appuyez longuement pour en choisir plusieurs.`
+    : 'Vos souvenirs restent ici, <b>sans limite de durée</b>. Touchez une photo pour la revoir, ou appuyez longuement pour en choisir plusieurs et les enregistrer sur votre téléphone.';
   node.hidden = false;
 }
 
