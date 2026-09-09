@@ -1,9 +1,0 @@
-[
-  {
-    "AllowedOrigins": ["https://ouistitii.pages.dev", "http://localhost:5185"],
-    "AllowedMethods": ["PUT", "GET", "HEAD"],
-    "AllowedHeaders": ["content-type", "content-length"],
-    "ExposeHeaders": ["etag"],
-    "MaxAgeSeconds": 3600
-  }
-]

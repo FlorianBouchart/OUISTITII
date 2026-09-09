@@ -395,17 +395,21 @@ Une page Google s'ouvre, on autorise, le jeton s'affiche dans le terminal.
 **Étape 2 — mettre en ligne**
 
 ```bash
-npx wrangler login                 # compte Cloudflare (Workers et D1 : gratuits)
-npm run db:create                  # reporter l'`database_id` dans wrangler.toml
+npm run login                 # compte Cloudflare (Workers et D1 : gratuits)
+npm run db:create             # reporter l'`database_id` dans wrangler.toml
 
-npx wrangler secret put TOKEN_SECRET           # une longue chaîne aléatoire
-npx wrangler secret put ADMIN_PASSWORD         # le mot de passe des mariés
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-npx wrangler secret put GOOGLE_REFRESH_TOKEN
+npm run secret:token          # une longue chaîne aléatoire
+npm run secret:admin          # le mot de passe des mariés
+npm run secret:g-id
+npm run secret:g-key
+npm run secret:g-token
 
 npm run deploy
 ```
+
+> **`npm run …`, jamais `npx wrangler …`** : le nom du dossier contient une
+> esperluette et des espaces, sur lesquels `npx` échoue silencieusement
+> (« command not found »).
 
 La base se crée d'elle-même au premier appel : aucune migration à lancer.
 

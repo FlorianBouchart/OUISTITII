@@ -170,11 +170,27 @@ stockage de fichiers de Cloudflare qui en demandait une — on ne l'utilise pas.
 
 ### 2.1 Se connecter
 
+> ⚠️ **Toujours `npm run …`, jamais `npx wrangler …`.**
+> Le dossier de ce projet s'appelle « Application photo/vidéo OUISTITII par
+> T&F » : l'esperluette et les espaces cassent la commande `npx`, qui répond
+> alors « command not found » sans rien faire. Les raccourcis `npm run`
+> contournent le problème.
+
 ```bash
-npx wrangler login
+npm run login
 ```
 
-Une page s'ouvre, vous créez un compte ou vous connectez, vous autorisez.
+Une page Cloudflare s'ouvre : créez un compte (gratuit, **sans carte
+bancaire**) ou connectez-vous, puis autorisez.
+
+Si aucune page ne s'ouvre, le terminal affiche une adresse : copiez-la dans
+votre navigateur.
+
+Pour vérifier que c'est bon :
+
+```bash
+npm run whoami
+```
 
 ### 2.2 Créer la base de données
 
@@ -194,23 +210,30 @@ place de `REMPLACER_PAR_L_ID_D1`.
 ### 2.3 Enregistrer les secrets
 
 Cinq commandes. Chacune demande la valeur, que vous collez puis validez.
+Rien ne s'affiche pendant la frappe : c'est normal.
 
 ```bash
-npx wrangler secret put TOKEN_SECRET
+npm run secret:token
 ```
-→ collez n'importe quelle longue suite de caractères au hasard (30+ signes)
+→ n'importe quelle longue suite de caractères au hasard (30 signes ou plus)
 
 ```bash
-npx wrangler secret put ADMIN_PASSWORD
+npm run secret:admin
 ```
 → le mot de passe de votre espace privé, celui que Thomy et vous utiliserez
 
 ```bash
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-npx wrangler secret put GOOGLE_REFRESH_TOKEN
+npm run secret:g-id
+npm run secret:g-key
+npm run secret:g-token
 ```
-→ les trois valeurs de l'étape 1
+→ les trois valeurs de l'étape 1 : identifiant, code secret, puis jeton
+
+Pour vérifier que les cinq sont bien enregistrés :
+
+```bash
+npm run secrets:list
+```
 
 ### 2.4 Publier
 
