@@ -5,6 +5,7 @@
  */
 
 import { json, AppError, purgeRateLimits } from './util.js';
+import { ensureSchema } from './schema.js';
 import {
   openSession, checkFingerprints, initUpload, morePartUrls,
   completeUpload, failUpload, relayUpload,
@@ -25,6 +26,9 @@ export default {
     if (request.method === 'OPTIONS') return preflight(request);
 
     try {
+      // La base se crée d'elle-même au premier appel : l'application ne doit
+      // pas dépendre d'une commande lancée à la main avant de fonctionner.
+      await ensureSchema(env);
       const response = await route(request, env, url, ctx);
       return withCors(response, request);
     } catch (error) {

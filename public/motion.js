@@ -9,7 +9,7 @@
  *   • tout se coupe proprement si le téléphone demande moins d'animations.
  */
 
-import { TailTransition, detectQuality } from './tail-transition.js';
+import { Shutter, detectQuality } from './shutter.js';
 
 const gsap = window.gsap;
 
@@ -19,61 +19,39 @@ export const reducedMotion = () =>
 export const finePointer = () => window.matchMedia('(pointer: fine)').matches;
 
 /* ═══════════════════════════════════════════════════════════════
-   TRANSITION — la queue du ouistiti balaie l'écran
+   TRANSITION — l'obturateur
    ═══════════════════════════════════════════════════════════════ */
 
-let engine = null;
+let shutter = null;
 let curtainBusy = false;
 let resizeTimer = null;
 
-/** Le moteur n'est construit qu'au premier passage, et une seule fois. */
-function getEngine() {
-  if (engine) return engine;
-  const canvas = document.querySelector('#tail-canvas');
+function getShutter() {
+  if (shutter) return shutter;
+  const canvas = document.querySelector('#shutter-canvas');
   if (!canvas || !canvas.getContext) return null;
 
-  engine = new TailTransition(canvas, { quality: detectQuality() });
+  shutter = new Shutter(canvas, { quality: detectQuality() });
 
-  // Rotation de l'écran ou clavier qui s'ouvre : on recalcule la trajectoire,
-  // jamais pendant une transition en cours.
   const onResize = () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (!curtainBusy) engine.resize(); }, 180);
+    resizeTimer = setTimeout(() => { if (!curtainBusy) shutter.resize(); }, 180);
   };
   window.addEventListener('resize', onResize, { passive: true });
   window.addEventListener('orientationchange', onResize, { passive: true });
-  return engine;
-}
-
-/** Courbe d'ensemble : entrée vive, enroulement qui prend son temps, fuite nette. */
-function tailEase() {
-  if (window.CustomEase) {
-    return (
-      window.CustomEase.get?.('ouistitiTail') ||
-      window.CustomEase.create(
-        'ouistitiTail',
-        // Volontairement proche de la diagonale : les temps forts sont réglés
-        // dans la trajectoire elle-même, une courbe trop marquée les décalerait.
-        // Il ne reste ici qu'un élan au départ et une détente à l'arrivée.
-        'M0,0 C0.14,0.16 0.3,0.4 0.5,0.51 0.72,0.63 0.86,0.86 1,1'
-      )
-    );
-  }
-  return 'power1.inOut';
+  return shutter;
 }
 
 /**
- * Rideau de passage.
- *
- * La queue entre hors champ, traverse l'écran, s'enroule jusqu'à tout recouvrir,
- * puis se dévide et s'échappe. L'écran change pendant qu'elle couvre — `swap`
- * est appelé à cet instant précis, et une seule fois.
+ * Passage d'un écran à l'autre : le diaphragme se ferme, l'écran change dans le
+ * noir, il se rouvre. Court — 720 ms — parce qu'une transition qu'on subit dix
+ * fois de suite doit rester une respiration, pas une attente.
  */
 export function curtain(swap, { word } = {}) {
   const veil = document.querySelector('#curtain');
-  const tail = getEngine();
+  const iris = getShutter();
 
-  if (reducedMotion() || !veil || !gsap || !tail) {
+  if (reducedMotion() || !veil || !gsap || !iris) {
     swap();
     return Promise.resolve();
   }
@@ -87,28 +65,18 @@ export function curtain(swap, { word } = {}) {
   if (label) label.textContent = word || '';
 
   const stage = document.querySelector('#app');
-  const light = tail.quality === 'low';
-
-  tail.resize();
-  tail.reset();
+  iris.resize();
   veil.hidden = false;
 
   const state = { p: 0 };
-  const duration = window.innerHeight >= window.innerWidth ? 1.05 : 1.2;
+  const duration = 0.72;
 
   return new Promise((resolve) => {
     let settled = false;
     let swapped = false;
     let timeline = null;
-    let last = performance.now();
 
-    const render = () => {
-      const now = performance.now();
-      const delta = now - last;
-      last = now;
-      tail.advance(state.p, delta);
-      tail.draw(state.p);
-    };
+    const render = () => iris.draw(state.p);
 
     const swapOnce = () => {
       if (swapped) return;
@@ -122,9 +90,8 @@ export function curtain(swap, { word } = {}) {
       clearTimeout(guard);
       gsap.ticker.remove(render);
       timeline?.kill();
-      tail.clear();
+      iris.clear();
       veil.hidden = true;
-      // On rend la main au navigateur : plus une seule couche à composer.
       gsap.set(stage, { clearProps: 'transform,opacity,willChange' });
       gsap.set(label, { clearProps: 'all' });
       curtainBusy = false;
@@ -132,75 +99,34 @@ export function curtain(swap, { word } = {}) {
     };
 
     /*
-     * Filet de sécurité. GSAP avance au rythme des images écran, qui s'arrêtent
-     * net quand l'onglet passe en arrière-plan ou que le téléphone se verrouille.
-     * Passé le temps prévu, on tranche : l'écran a de toute façon déjà changé.
+     * Filet de sécurité. Les images écran s'arrêtent net quand l'onglet passe
+     * en arrière-plan ou que le téléphone se verrouille : sans cela, l'invité
+     * resterait derrière un obturateur fermé.
      */
     const guard = setTimeout(() => {
       swapOnce();
       finish();
-    }, duration * 1000 + 1400);
+    }, duration * 1000 + 1200);
 
     gsap.ticker.add(render);
-
     timeline = gsap.timeline({ onComplete: finish });
 
-    // La queue elle-même.
-    timeline.to(state, { p: 1, duration, ease: tailEase() }, 0);
+    timeline.to(state, { p: 1, duration, ease: 'none' }, 0);
 
-    // La page qui part : elle recule d'abord d'un cheveu — l'anticipation — puis
-    // s'enfonce pendant que la queue passe devant.
+    // La page recule un peu, comme un objectif qui fait le point.
     timeline
-      .set(stage, { willChange: 'transform', transformPerspective: light ? 0 : 900 }, 0)
-      .to(stage, { scale: 1.012, duration: duration * 0.1, ease: 'power2.out' }, 0)
-      .to(
-        stage,
-        {
-          scale: light ? 0.965 : 0.93,
-          rotateX: light ? 0 : 5,
-          y: light ? 0 : -14,
-          opacity: 0.55,
-          duration: duration * 0.42,
-          ease: 'power2.in',
-        },
-        duration * 0.1
-      );
+      .set(stage, { willChange: 'transform' }, 0)
+      .to(stage, { scale: 0.965, opacity: 0.7, duration: duration * 0.42, ease: 'power2.in' }, 0)
+      .set(stage, { scale: 1.035, opacity: 0.7 }, duration * 0.52)
+      .to(stage, { scale: 1, opacity: 1, duration: duration * 0.46, ease: 'power2.out' }, duration * 0.54);
 
-    // Le mot de la marque, le temps que l'écran soit couvert.
     if (label) {
       timeline
-        .fromTo(
-          label,
-          { opacity: 0, y: 12, scale: 0.94 },
-          { opacity: 1, y: 0, scale: 1, duration: duration * 0.12, ease: 'back.out(2.4)' },
-          duration * 0.56
-        )
-        .to(label, { opacity: 0, y: -10, duration: duration * 0.1, ease: 'power2.in' }, duration * 0.76);
+        .fromTo(label, { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.14 }, duration * 0.42)
+        .to(label, { opacity: 0, duration: 0.12 }, duration * 0.58);
     }
 
-    // Bascule d'écran : au cœur de la couverture, quand rien ne transparaît.
-    timeline.add(swapOnce, duration * 0.61);
-
-    // La page qui arrive : elle vient de plus loin et dépasse légèrement sa place.
-    timeline
-      .fromTo(
-        stage,
-        {
-          scale: light ? 1.03 : 1.07,
-          rotateX: light ? 0 : -6,
-          y: light ? 0 : 16,
-          opacity: 0.5,
-        },
-        {
-          scale: 1,
-          rotateX: 0,
-          y: 0,
-          opacity: 1,
-          duration: duration * 0.36,
-          ease: 'back.out(1.35)',
-        },
-        duration * 0.61
-      );
+    timeline.add(swapOnce, duration * 0.48);
   });
 }
 
@@ -512,14 +438,6 @@ export function countTo(node, value, { duration = 1.1 } = {}) {
     node.textContent = String(value);
   }, duration * 1000 + 500);
   tween.eventCallback('onComplete', () => clearTimeout(timer));
-}
-
-/** Trait qui se remplit sous un champ pendant la frappe. */
-export function inkUnderline(field, ratio) {
-  const line = field.querySelector('.field-ink');
-  if (!line) return;
-  if (!gsap) { line.style.transform = `scaleX(${ratio})`; return; }
-  gsap.to(line, { scaleX: ratio, duration: 0.4, ease: 'power2.out' });
 }
 
 /** Le sceau final qui se dessine, trait après trait. */

@@ -15,7 +15,7 @@ import {
 } from './media-tools.js';
 import {
   curtain, riseIn, spellOut, Mascot, flash, dropIn, flyOut, popSay,
-  magnetize, countTo, inkUnderline, drawSeal, reducedMotion,
+  magnetize, countTo, drawSeal, reducedMotion,
 } from './motion.js';
 
 /* ─── État ─────────────────────────────────────────────────────── */
@@ -54,7 +54,6 @@ const el = {
 /* ─── Navigation ───────────────────────────────────────────────── */
 
 const CURTAIN_WORDS = {
-  name: 'Enchantés',
   add: 'Ouistiti !',
   gallery: 'L’album',
   done: 'Merci',
@@ -62,12 +61,12 @@ const CURTAIN_WORDS = {
 };
 
 /** Change d'écran derrière le rideau. */
-function go(name, { silent = false } = {}) {
+function go(name, { silent = false, word } = {}) {
   if (state.screen === name) return Promise.resolve();
   const swap = () => paintScreen(name);
   return silent || reducedMotion()
     ? Promise.resolve(swap())
-    : curtain(swap, { word: CURTAIN_WORDS[name] || '' });
+    : curtain(swap, { word: word || CURTAIN_WORDS[name] || '' });
 }
 
 function paintScreen(name) {
@@ -80,7 +79,10 @@ function paintScreen(name) {
   const screen = $(`#screen-${name}`);
   if (screen) riseIn(screen, { delay: 0.06 });
 
-  if (name === 'welcome') spellOut($('.wordmark-letters'), { delay: 0.1 });
+  if (name === 'welcome') {
+    spellOut($('.wordmark-letters'), { delay: 0.1 });
+    onNameInput();
+  }
   if (name === 'gallery') loadGallery({ reset: true });
   if (name === 'done') drawSeal($('#done-seal-svg'));
 
@@ -120,30 +122,25 @@ const grin = () => mascots.forEach((m) => m.grin());
 
 /* ─── Écran 1 · Bienvenue ──────────────────────────────────────── */
 
-$('#btn-start').addEventListener('click', () => go(state.guest ? 'add' : 'name'));
-
 /* ─── Écran 2 · Identification ─────────────────────────────────── */
 
 const firstNameField = $('#first-name');
 const lastNameField = $('#last-name');
-const signature = $('.signature');
 
 /** La saisie fait vivre l'écran : trait qui se remplit, signature qui se trace. */
 function onNameInput() {
   const first = firstNameField.value.trim();
   const last = lastNameField.value.trim();
 
-  inkUnderline(firstNameField.closest('.field'), Math.min(first.length / 8, 1));
-  inkUnderline(lastNameField.closest('.field'), Math.min(last.length / 8, 1));
-
+  // Le nom s'écrit en direct, en script : l'invité voit sa signature se former.
   const full = [first, last].filter(Boolean).join(' ');
-  $('#signature-name').textContent = full || ' ';
-  signature.classList.toggle('is-signed', first.length >= 2 && last.length >= 1);
+  $('#signature-name').textContent = full || '\u00A0';
+  $('#btn-name-next').classList.toggle('is-ready', first.length >= 2 && last.length >= 1);
 
   // Le ouistiti suit ce qu'on écrit du regard.
-  const ratio = Math.min((first.length + last.length) / 16, 1);
-  mascots.forEach((m) => m.look(ratio));
+  mascots.forEach((m) => m.look(Math.min((first.length + last.length) / 16, 1)));
 }
+
 
 for (const field of [firstNameField, lastNameField]) {
   field.addEventListener('input', onNameInput);
@@ -179,12 +176,12 @@ $('#form-name').addEventListener('submit', async (event) => {
     paintIdentity();
     grin();
     await restoreQueue();
-    await go('add');
+    await go('add', { word: 'Ouistiti !' });
   } catch (error) {
     notice(el.nameError, error.message || 'Impossible d’ouvrir la session.');
   } finally {
     button.disabled = false;
-    button.textContent = 'Continuer';
+    button.textContent = 'Envoyer mes souvenirs';
   }
 });
 
@@ -216,7 +213,7 @@ $('#btn-swap').addEventListener('click', () => {
       firstNameField.value = '';
       lastNameField.value = '';
       onNameInput();
-      await go('name');
+      await go('welcome');
     },
   });
 });
@@ -1005,17 +1002,19 @@ function setBusy(busy, message) {
   for (const button of $$('.btn-primary')) magnetize(button, 0.16);
 
   const saved = api.loadSession();
+  if (saved) {
+    // On connaît déjà l'invité : son nom est prérempli, il n'a qu'à confirmer.
+    firstNameField.value = saved.firstName || '';
+    lastNameField.value = saved.lastName || '';
+  }
+
   if (saved && api.hasToken()) {
     state.guest = saved;
     paintIdentity();
     await restoreQueue();
-  } else if (saved) {
-    // Le jeton a expiré mais on connaît le nom : on le repropose.
-    firstNameField.value = saved.firstName || '';
-    lastNameField.value = saved.lastName || '';
-    onNameInput();
+    paintScreen('add');   // session encore valable : on va droit au studio
+  } else {
+    paintScreen('welcome');
   }
-
-  paintScreen('welcome');
   document.body.dataset.ready = 'true';
 })();

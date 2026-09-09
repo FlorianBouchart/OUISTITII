@@ -13,7 +13,8 @@
     "bucket:cors": "wrangler r2 bucket cors put ouistitii-medias --file r2-cors.json",
     "db:create": "wrangler d1 create ouistitii",
     "tail": "wrangler tail",
-    "verify": "node scripts/verify-signature.mjs"
+    "verify": "node scripts/verify-signature.mjs",
+    "db:dump": "node -e \"const fs=require('fs');import('./worker/schema.js').then(m=>{fs.writeFileSync('schema.sql',m.SCHEMA.map(s=>s+';').join('\\n\\n')+'\\n');console.log('schema.sql régénéré')})\""
   },
   "devDependencies": {
     "wrangler": "^4.130.0"
