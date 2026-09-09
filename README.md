@@ -369,6 +369,9 @@ L'espace des mariés : `http://localhost:5185/admin.html`
 
 ### Production
 
+> **Marche à suivre détaillée, écran par écran : [`docs/MISE-EN-LIGNE.md`](docs/MISE-EN-LIGNE.md).**
+> Ce qui suit en est le résumé.
+
 **Étape 1 — autoriser l'application sur le Drive** (à faire une seule fois)
 
 1. Ouvrir [console.cloud.google.com](https://console.cloud.google.com), créer un
