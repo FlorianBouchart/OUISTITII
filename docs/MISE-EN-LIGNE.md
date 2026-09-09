@@ -260,17 +260,22 @@ Pour vérifier que les cinq sont en place :
 npm run secrets:list
 ```
 
-<details>
-<summary>Si vous préférez les enregistrer un par un</summary>
+**Si vous préférez les enregistrer un par un**, lancez ces commandes
+**une par une**, jamais toutes collées ensemble :
 
-```bash
-npm run secret:token     # clé de signature (une longue suite au hasard)
-npm run secret:admin     # mot de passe de l'espace privé
-npm run secret:g-id      # identifiant client Google
-npm run secret:g-key     # code secret Google
-npm run secret:g-token   # jeton de renouvellement
-```
-</details>
+| Commande | Ce qu'elle demande |
+|---|---|
+| `npm run secret:token` | la clé de signature (une longue suite au hasard) |
+| `npm run secret:admin` | le mot de passe de votre espace privé |
+| `npm run secret:g-id` | l'identifiant client Google |
+| `npm run secret:g-key` | le code secret Google |
+| `npm run secret:g-token` | le jeton de renouvellement |
+
+> ⚠️ **Ne collez jamais plusieurs lignes d'un coup dans le terminal.**
+> Le shell exécute la première et se perd dans les suivantes — surtout si elles
+> contiennent une apostrophe, auquel cas il affiche `quote>` et attend une
+> fermeture qui ne viendra pas. Dans ce cas : **Ctrl+C**, puis reprenez ligne
+> par ligne.
 
 ### 2.4 Publier
 

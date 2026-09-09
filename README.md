@@ -356,9 +356,9 @@ programmée nulle part dans le code.
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars     # renseigner TOKEN_SECRET et ADMIN_PASSWORD
-npm run db:migrate                 # crée la base D1 locale
-npm run dev                        # http://localhost:5185
+cp .dev.vars.example .dev.vars
+npm run db:migrate
+npm run dev
 ```
 
 Sans clés S3, l'application bascule d'elle-même en **mode relais** : les fichiers
@@ -395,10 +395,10 @@ Une page Google s'ouvre, on autorise, le jeton s'affiche dans le terminal.
 **Étape 2 — mettre en ligne**
 
 ```bash
-npm run login                 # compte Cloudflare (Workers et D1 : gratuits)
-npm run db:create             # reporter l'`database_id` dans wrangler.toml
+npm run login
+npm run db:create
 
-npm run setup                 # enregistre les cinq secrets, en guidant
+npm run setup
 npm run deploy
 ```
 

@@ -22,7 +22,7 @@ preview_bucket_name = "ouistitii-medias-dev"
 [[d1_databases]]
 binding = "DB"
 database_name = "ouistitii"
-database_id = "REMPLACER_PAR_L_ID_D1"
+database_id = "9192f01d-b84b-4dfe-9f83-2aac4e604020"
 
 [vars]
 EVENT_DATE   = "2026-12-12"
