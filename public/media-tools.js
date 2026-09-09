@@ -7,7 +7,7 @@
  */
 
 const SAMPLE = 64 * 1024;   // octets lus en tête et en queue de fichier
-const THUMB_SIZE = 240;     // côté de la miniature, en pixels
+const THUMB_MAX = 420;      // plus grand côté de la miniature, en pixels
 
 /* ─── Empreinte anti-doublon ───────────────────────────────────── */
 
@@ -91,25 +91,53 @@ export async function makeThumb(file, kind) {
   }
 }
 
+/** Dimensions de la miniature, à ratio conservé. */
+function fit(width, height) {
+  const ratio = Math.min(THUMB_MAX / Math.max(width, height), 1);
+  return {
+    width: Math.max(Math.round(width * ratio), 1),
+    height: Math.max(Math.round(height * ratio), 1),
+  };
+}
+
 async function imageThumb(file) {
+  // On lit d'abord les proportions dans l'en-tête du fichier : sans elles,
+  // le redimensionnement écraserait l'image dans un carré.
+  const size = await readPixelSize(file);
   let bitmap;
+
   if (canRescale) {
     try {
-      bitmap = await createImageBitmap(file, {
-        resizeWidth: THUMB_SIZE,
-        resizeHeight: THUMB_SIZE,
-        resizeQuality: 'low',
-      });
+      if (size) {
+        const target = fit(size.width, size.height);
+        // resizeWidth/resizeHeight, pas width/height : ce sont ces options-là
+        // que le décodeur comprend, et elles évitent de décompresser douze
+        // mégapixels en mémoire pour n'en garder qu'une vignette.
+        bitmap = await createImageBitmap(file, {
+          resizeWidth: target.width,
+          resizeHeight: target.height,
+          resizeQuality: 'medium',
+        });
+      } else {
+        bitmap = await createImageBitmap(file);
+      }
     } catch {
-      bitmap = await createImageBitmap(file); // certains formats refusent le redimensionnement
+      bitmap = await createImageBitmap(file);
     }
   } else {
     bitmap = await bitmapFromElement(file);
   }
 
   const blob = await drawToBlob(bitmap);
+  // Les proportions renvoyées sont celles de la photo d'origine : c'est d'elles
+  // que la mosaïque a besoin pour donner à chaque vignette sa juste hauteur.
+  const out = {
+    blob,
+    width: size?.width || bitmap.width,
+    height: size?.height || bitmap.height,
+  };
   bitmap.close?.();
-  return { blob };
+  return out;
 }
 
 async function videoThumb(file) {
@@ -137,16 +165,7 @@ async function videoThumb(file) {
     if (!frame || !video.videoWidth) return { blob: null, duration };
     const size = { width: video.videoWidth, height: video.videoHeight };
 
-    const side = Math.min(video.videoWidth, video.videoHeight);
-    const canvas = document.createElement('canvas');
-    canvas.width = THUMB_SIZE;
-    canvas.height = THUMB_SIZE;
-    canvas.getContext('2d').drawImage(
-      video,
-      (video.videoWidth - side) / 2, (video.videoHeight - side) / 2, side, side,
-      0, 0, THUMB_SIZE, THUMB_SIZE
-    );
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+    const blob = await drawToBlob(video, { width: video.videoWidth, height: video.videoHeight });
     return { blob, duration, ...size };
   } finally {
     video.removeAttribute('src');
@@ -155,17 +174,18 @@ async function videoThumb(file) {
   }
 }
 
-async function drawToBlob(bitmap) {
-  const side = Math.min(bitmap.width, bitmap.height);
+async function drawToBlob(source, natural) {
+  const w = natural?.width || source.width || source.videoWidth;
+  const h = natural?.height || source.height || source.videoHeight;
+  const target = fit(w, h);
+
   const canvas = document.createElement('canvas');
-  canvas.width = THUMB_SIZE;
-  canvas.height = THUMB_SIZE;
-  canvas.getContext('2d').drawImage(
-    bitmap,
-    (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side,
-    0, 0, THUMB_SIZE, THUMB_SIZE
-  );
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+  canvas.width = target.width;
+  canvas.height = target.height;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, target.width, target.height);
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.78));
 }
 
 function bitmapFromElement(file) {

@@ -74,6 +74,7 @@ export async function openSession(request, env) {
         multipartThreshold: multipartThreshold(env),
         transport: storageMode(env),
         acceptedTypes: 'image/*,video/*',
+        availableUntil: env.AVAILABLE_UNTIL || null,
       },
     },
     200,
@@ -441,7 +442,7 @@ export async function listGallery(request, env, url) {
 
   const { results } = await env.DB.prepare(
     `SELECT m.id, m.kind, m.width, m.height, m.duration, m.completed_at,
-            m.thumb_key IS NOT NULL AS has_thumb,
+            m.stored_size, m.thumb_key IS NOT NULL AS has_thumb,
             m.contributor_id, c.display_name, c.first_name
        FROM media m JOIN contributors c ON c.id = m.contributor_id
       WHERE ${where.join(' AND ')}
@@ -461,6 +462,7 @@ export async function listGallery(request, env, url) {
       width: r.width,
       height: r.height,
       duration: r.duration,
+      bytes: r.stored_size,
       at: r.completed_at,
       author: r.display_name,
       authorFirst: r.first_name,

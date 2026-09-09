@@ -31,6 +31,8 @@ Bienvenue → Qui nous écrit ? → Ajouter · vérifier · retirer → Envoyer 
 | Fermeture accidentelle | Fichiers et progression conservés dans IndexedDB, restaurés au retour. |
 | Confirmation | Décompte photos / vidéos, et retour immédiat vers « ajouter d'autres souvenirs ». |
 | Album partagé | Les souvenirs de tous les invités, filtrables, en aperçus légers. |
+| Reprendre ses photos | Feuille de partage native : Photos, Fichiers, **Google Drive**, en qualité d'origine. |
+| Sélection multiple | Appui long ou bouton dédié, puis enregistrement ou retrait groupé. |
 | Verrouillage | Un souvenir arrivé n'est plus modifiable — seul son auteur peut le retirer. |
 
 **Côté mariés** (`public/admin.html`) — protégé par mot de passe : totaux, poids,
@@ -88,7 +90,8 @@ public/
   motion.js     orchestration : rideau, mascotte vivante, micro-interactions
   tail-transition.js  le moteur de la queue — physique, projection, rendu
   vendor/       GSAP, servi en local (la CSP interdit les scripts externes)
-  app.js        parcours, file d'attente, album, rendu
+  app.js        parcours, file d'attente, album, sélection, rendu
+  export.js     enregistrement sur le téléphone (partage natif, téléchargement)
   uploader.js   moteur d'envoi (parties, reprise, tentatives)
   media-tools.js empreintes, miniatures, cadence
   store.js      persistance IndexedDB
@@ -216,6 +219,36 @@ choix assumé : pas de mot de passe, donc pas de friction le jour J. Quelqu'un q
 saisirait exactement le même prénom et le même nom qu'un autre invité hériterait
 de ses droits — accepté ici, entre convives d'un mariage, contre le coût d'une
 inscription pour deux cents personnes.
+
+---
+
+## 2 quater. Récupérer ses souvenirs
+
+Un invité revient quand il veut : il redonne son prénom et son nom, et retrouve
+l'album. Chaque photo peut repartir **dans sa qualité d'origine** — c'est le
+fichier stocké qui est servi, jamais une version recompressée.
+
+**Sur téléphone, on passe par la feuille de partage du système**
+(`navigator.share` avec fichiers). C'est elle qui propose « Enregistrer dans
+Photos », « Enregistrer dans Fichiers », **« Google Drive »**, Dropbox, et toutes
+les destinations installées. Un seul mécanisme couvre iOS et Android, sans
+compte à connecter, sans autorisation à demander, sans clé d'API Google à gérer
+— et sans que l'application ait à connaître les destinations à l'avance.
+
+Sur ordinateur, ou si le partage de fichiers n'est pas disponible, l'application
+retombe sur un téléchargement classique, espacé pour que le navigateur ne bloque
+pas la rafale.
+
+Les lots partent **par dix** : au-delà, certains iPhone referment la feuille de
+partage sans rien enregistrer. Une sélection de cinquante photos part donc en
+cinq fois, avec l'avancement affiché.
+
+Pour tout récupérer d'un coup après le mariage, les mariés disposent de leur
+propre chemin (§5) : `rclone` sur le bucket, et le manifeste CSV.
+
+**Durée de conservation** : `AVAILABLE_UNTIL` dans `wrangler.toml` fixe la date
+annoncée aux invités dans l'album. C'est une information affichée, pas une
+suppression automatique : rien n'est jamais effacé sans une décision des mariés.
 
 ---
 
@@ -384,6 +417,9 @@ Testé de bout en bout sur le Worker local, en émulation iPhone :
 - **la transition, image par image** sur six formats : couverture totale au
   moment de la bascule, coût par image mesuré, aucune fuite après six passages,
   navigation intacte quand le canvas est retiré ;
+- **la chaîne de l'API de bout en bout** (`npm run verify:api`) : 32 contrôles,
+  aucun échec — y compris sur une base d'ancienne génération, dont les colonnes
+  manquantes sont ajoutées automatiquement ;
 - accessibilité : contrastes tous ≥ 4,5:1, cibles tactiles ≥ 44 px ;
 - `npm run verify` : signature SigV4 conforme au vecteur de test officiel d'AWS et à une
   seconde implémentation indépendante (clés accentuées et `uploadId` exotiques compris).

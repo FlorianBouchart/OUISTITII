@@ -359,6 +359,9 @@ img { display: block; max-width: 100%; }
 
 .wordmark {
   font-family: var(--font-title);
+  /* C'est un h1 : sans cela le navigateur graisse tout, et le script des
+     mariés se retrouve en faux-gras. */
+  font-weight: 400;
   font-size: clamp(1.85rem, 9.5vw, 2.7rem);
   letter-spacing: .04em;
   line-height: 1;
@@ -367,6 +370,7 @@ img { display: block; max-width: 100%; }
 .wordmark-by {
   display: block;
   font-family: var(--font-sub);
+  font-weight: 400;
   font-size: .68rem;
   letter-spacing: .3em;
   color: var(--gold-text);
@@ -374,6 +378,7 @@ img { display: block; max-width: 100%; }
 }
 .wordmark-names {
   font-family: var(--font-script);
+  font-weight: 400;
   font-size: clamp(1.5rem, 7vw, 2rem);
   color: var(--ocean2);
   line-height: 1.1;
@@ -830,7 +835,9 @@ img { display: block; max-width: 100%; }
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  /* Au-dessus de la visionneuse (500) : sinon la confirmation s'affiche
+     derrière la photo plein écran, et il faut en sortir pour la voir. */
+  z-index: 700;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1315,3 +1322,161 @@ img { display: block; max-width: 100%; }
    entrerait en conflit avec les transformations de l'animation. */
 .tile { will-change: transform; }
 .queue { overflow: visible; }
+
+/* ═══════════════════════════════════════════════════════════════
+   ALBUM — proportions, sélection, enregistrement
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Les vignettes gardent le format de la photo : un cadre carré imposé
+   rognait ou écrasait tout, et se voyait. */
+.mosaic {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-auto-rows: 10px;
+  gap: .45rem;
+  align-items: start;
+}
+@media (min-width: 560px) { .mosaic { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); } }
+
+.shot { aspect-ratio: auto; height: 100%; }
+.shot img { width: 100%; height: 100%; object-fit: cover; }
+
+.gallery-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+.gallery-tools .chips { margin-bottom: 0; }
+
+.pick-toggle {
+  min-height: 40px;
+  padding: .4rem 1rem;
+  border: 1px solid var(--border2);
+  border-radius: var(--r-pill);
+  font-size: .72rem;
+  color: var(--text-mid);
+  white-space: nowrap;
+  transition: background var(--dur-mid) ease, color var(--dur-mid) ease;
+}
+.pick-toggle.is-on { background: var(--navy); color: var(--cream); border-color: var(--navy); }
+
+/* ─── Sélection multiple ─── */
+.shot-pick {
+  position: absolute;
+  top: 6px; left: 6px;
+  width: 26px; height: 26px;
+  border-radius: var(--r-pill);
+  background: rgba(250,245,239,.86);
+  border: 1.5px solid rgba(31,47,68,.3);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  z-index: 2;
+}
+.mosaic.picking .shot-pick { display: flex; }
+.mosaic.picking .shot-author, .mosaic.picking .shot-mine { display: none; }
+.shot-pick svg { width: 15px; height: 15px; }
+.shot.is-picked .shot-pick { background: var(--navy); border-color: var(--navy); color: var(--cream); }
+.shot.is-picked { outline: 3px solid var(--navy); outline-offset: -3px; }
+.shot.is-picked img { filter: brightness(.86); }
+
+.picked-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  margin: 1rem -1.1rem 0;
+  padding: .8rem 1.1rem calc(.8rem + var(--safe-b));
+  background: rgba(250,245,239,.97);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border-top: 1px solid var(--gold-border);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.picked-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .8rem;
+  font-size: .78rem;
+  color: var(--navy);
+  margin-bottom: .7rem;
+}
+.picked-cancel {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border2);
+  color: var(--navy);
+}
+.picked-cancel svg { width: 13px; height: 13px; }
+.picked-all {
+  font-size: .72rem;
+  color: var(--ocean2);
+  border-bottom: 1px solid var(--gold-border2);
+  min-height: 34px;
+  padding: 0 .2rem;
+}
+.picked-actions { display: flex; gap: .5rem; }
+.picked-actions .btn { flex: 1; }
+.btn.danger { color: var(--alert); border-color: rgba(142,47,60,.35); }
+.btn.danger:hover { background: var(--alert-bg); }
+
+/* ─── Visionneuse ─── */
+.viewer-actions { display: flex; gap: .5rem; }
+.viewer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-height: 44px;
+  padding: .5rem 1.05rem;
+  border-radius: var(--r-pill);
+  font-size: .7rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--cream);
+  border: 1px solid rgba(250,245,239,.28);
+  transition: background var(--dur-mid) ease;
+}
+.viewer-btn svg { width: 15px; height: 15px; }
+.viewer-btn:hover { background: rgba(250,245,239,.14); }
+.viewer-btn.danger { color: #E8A0AC; border-color: rgba(232,160,172,.4); }
+.viewer-btn.danger:hover { background: rgba(232,160,172,.14); }
+.viewer-btn[hidden] { display: none; }
+
+/* ─── Avancement d'un enregistrement ─── */
+.saving {
+  position: fixed;
+  left: 50%;
+  bottom: calc(5.5rem + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .7rem 1.3rem;
+  border-radius: var(--r-pill);
+  background: var(--navy);
+  color: var(--cream);
+  font-size: .78rem;
+  white-space: nowrap;
+  box-shadow: var(--shadow-lift);
+}
+.saving[hidden] { display: none; }
+.saving svg { width: 16px; height: 16px; }
+
+/* Ce que devient l'album, dit simplement. */
+.keepsafe {
+  margin: 1.4rem 0 0;
+  padding: .85rem 1rem;
+  border-radius: var(--r-sm);
+  background: rgba(191,212,230,.16);
+  font-size: .78rem;
+  line-height: 1.6;
+  color: var(--text-mid);
+  text-align: center;
+}
+.keepsafe b { font-weight: 400; color: var(--navy); }

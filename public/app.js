@@ -14,6 +14,9 @@ import {
   fingerprint, headBytes, makeThumb, readPixelSize, inBatches, formatBytes, formatDuration,
 } from './media-tools.js';
 import {
+  canShareFiles, prepareFiles, shareFiles, downloadFile, totalBytes, BATCH,
+} from './export.js';
+import {
   curtain, riseIn, spellOut, Mascot, flash, dropIn, flyOut, popSay,
   magnetize, countTo, drawSeal, reducedMotion,
 } from './motion.js';
@@ -26,6 +29,8 @@ const state = {
   sending: false,
   screen: 'welcome',
   gallery: { items: [], offset: 0, filter: '', total: 0, loading: false, done: false },
+  picking: false,
+  picked: new Set(),
 };
 
 let uploader = null;
@@ -758,6 +763,7 @@ async function loadGallery({ reset }) {
     dropIn(fresh);
 
     $('#btn-gallery-more').hidden = g.done;
+    paintKeepsafe();
     $('#gallery-empty').hidden = g.items.length > 0;
     paintGalleryCounts(data);
   } catch (error) {
@@ -776,6 +782,22 @@ function showSkeletons(n) {
     fragment.appendChild(skeleton);
   }
   el.mosaic.appendChild(fragment);
+}
+
+/** Rappelle où vivent les souvenirs, et jusqu'à quand on peut venir les chercher. */
+function paintKeepsafe() {
+  const node = $('#keepsafe');
+  if (!node || !state.gallery.items.length) { if (node) node.hidden = true; return; }
+
+  const until = state.guest?.config?.availableUntil;
+  const date = until
+    ? new Date(until).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+
+  node.innerHTML = date
+    ? `Vos souvenirs restent ici jusqu’au <b>${date}</b>. Vous pouvez revenir les chercher quand vous voulez — touchez une photo, ou appuyez longuement pour en choisir plusieurs.`
+    : 'Touchez une photo pour la revoir, ou appuyez longuement pour en choisir plusieurs et les enregistrer.';
+  node.hidden = false;
 }
 
 function paintGalleryCounts(data) {
@@ -797,6 +819,11 @@ function buildShot(item) {
   shot.type = 'button';
   shot.dataset.id = item.id;
   shot.setAttribute('role', 'listitem');
+
+  // La vignette occupe la hauteur qu'appelle son format : une grille de carrés
+  // rognerait les portraits et écraserait les panoramas.
+  const ratio = item.width && item.height ? item.height / item.width : 1;
+  shot.style.gridRowEnd = `span ${Math.round(Math.min(Math.max(ratio, 0.6), 1.7) * 14) + 1}`;
   shot.setAttribute(
     'aria-label',
     `${item.kind === 'video' ? 'Vidéo' : 'Photo'} de ${item.author}${item.mine ? ' — le vôtre' : ''}`
@@ -835,8 +862,179 @@ function buildShot(item) {
   author.textContent = item.authorFirst || item.author;
   shot.appendChild(author);
 
-  shot.addEventListener('click', () => openViewer(item));
+  const pick = document.createElement('span');
+  pick.className = 'shot-pick';
+  pick.innerHTML = '<svg aria-hidden="true"><use href="#i-check"></use></svg>';
+  shot.appendChild(pick);
+
+  shot.addEventListener('click', () => {
+    if (state.picking) togglePick(item, shot);
+    else openViewer(item);
+  });
+
+  // Un appui prolongé ouvre la sélection : le geste attendu d'une galerie photo.
+  let holdTimer = null;
+  const startHold = () => {
+    holdTimer = setTimeout(() => {
+      if (!state.picking) {
+        setPicking(true);
+        togglePick(item, shot);
+        navigator.vibrate?.(12);
+      }
+    }, 420);
+  };
+  const cancelHold = () => clearTimeout(holdTimer);
+  shot.addEventListener('pointerdown', startHold);
+  for (const evt of ['pointerup', 'pointerleave', 'pointercancel']) {
+    shot.addEventListener(evt, cancelHold);
+  }
+  shot.addEventListener('contextmenu', (e) => { if (state.picking) e.preventDefault(); });
+
   return shot;
+}
+
+/* ─── Sélection multiple ───────────────────────────────────────── */
+
+function setPicking(on) {
+  state.picking = on;
+  if (!on) state.picked.clear();
+  el.mosaic.classList.toggle('picking', on);
+  $('#btn-pick').classList.toggle('is-on', on);
+  $('#btn-pick').textContent = on ? 'Terminer' : 'Sélectionner';
+  $('#picked-bar').hidden = !on;
+  if (!on) {
+    for (const node of el.mosaic.querySelectorAll('.shot.is-picked')) {
+      node.classList.remove('is-picked');
+    }
+  }
+  paintPicked();
+}
+
+function togglePick(item, node) {
+  if (state.picked.has(item.id)) state.picked.delete(item.id);
+  else state.picked.add(item.id);
+  node.classList.toggle('is-picked', state.picked.has(item.id));
+  paintPicked();
+}
+
+function pickedItems() {
+  return state.gallery.items.filter((i) => state.picked.has(i.id));
+}
+
+function paintPicked() {
+  const chosen = pickedItems();
+  const n = chosen.length;
+  $('#picked-count').textContent = n
+    ? `${n} sélectionné${n > 1 ? 's' : ''} · ${formatBytes(totalBytes(chosen))}`
+    : 'Touchez les souvenirs à garder';
+  $('#btn-pick-save').disabled = n === 0;
+  $('#btn-pick-save-label').textContent = n > 1 ? `Enregistrer les ${n}` : 'Enregistrer';
+
+  // Le retrait n'apparaît que si la sélection ne contient que ses propres souvenirs.
+  const onlyMine = n > 0 && chosen.every((i) => i.mine);
+  $('#btn-pick-delete').hidden = !onlyMine;
+}
+
+$('#btn-pick').addEventListener('click', () => setPicking(!state.picking));
+$('#btn-pick-cancel').addEventListener('click', () => setPicking(false));
+
+$('#btn-pick-all').addEventListener('click', () => {
+  const all = state.gallery.items;
+  const complet = state.picked.size === all.length;
+  state.picked = new Set(complet ? [] : all.map((i) => i.id));
+  for (const node of el.mosaic.querySelectorAll('.shot')) {
+    node.classList.toggle('is-picked', state.picked.has(node.dataset.id));
+  }
+  paintPicked();
+});
+
+$('#btn-pick-save').addEventListener('click', () => saveItems(pickedItems()));
+
+$('#btn-pick-delete').addEventListener('click', () => {
+  const chosen = pickedItems().filter((i) => i.mine);
+  if (!chosen.length) return;
+  confirmDialog({
+    title: chosen.length > 1 ? `Retirer ${chosen.length} souvenirs` : 'Retirer ce souvenir',
+    text: 'Ils seront définitivement effacés de l’album et du stockage des mariés.',
+    confirmLabel: 'Oui, retirer',
+    onConfirm: async () => {
+      for (const item of chosen) await removeFromGallery(item, { quiet: true });
+      setPicking(false);
+      paintGalleryCounts({
+        total: state.gallery.total,
+        photos: state.gallery.items.filter((i) => i.kind === 'photo').length,
+        videos: state.gallery.items.filter((i) => i.kind === 'video').length,
+      });
+    },
+  });
+});
+
+/* ─── Enregistrer sur son téléphone ────────────────────────────── */
+
+const savingBox = document.createElement('div');
+savingBox.className = 'saving';
+savingBox.hidden = true;
+document.body.appendChild(savingBox);
+
+function saying(message) {
+  if (!message) { savingBox.hidden = true; return; }
+  savingBox.innerHTML = `<svg class="spin" aria-hidden="true"><use href="#i-loader"></use></svg><span>${message}</span>`;
+  savingBox.hidden = false;
+}
+
+/**
+ * Sur téléphone, la feuille de partage native laisse choisir la destination :
+ * Photos, Fichiers, Google Drive… Ailleurs, on télécharge simplement.
+ * Les fichiers partent dans leur qualité d'origine.
+ */
+async function saveItems(items) {
+  if (!items.length) return;
+
+  const lots = [];
+  for (let i = 0; i < items.length; i += BATCH) lots.push(items.slice(i, i + BATCH));
+
+  try {
+    for (let l = 0; l < lots.length; l++) {
+      const lot = lots[l];
+      const suite = lots.length > 1 ? ` (${l + 1}/${lots.length})` : '';
+      const files = await prepareFiles(lot, (done, total) =>
+        saying(`Préparation ${done}/${total}${suite}…`)
+      );
+      saying(null);
+
+      if (canShareFiles()) {
+        const done = await shareFiles(files, 'Souvenirs OUISTITII');
+        if (!done) files.forEach(downloadFile);
+      } else {
+        // Les navigateurs limitent les téléchargements en rafale : on espace.
+        for (const file of files) {
+          downloadFile(file);
+          await new Promise((r) => setTimeout(r, 350));
+        }
+      }
+    }
+    popSay(items.length > 1 ? 'Souvenirs enregistrés' : 'Souvenir enregistré');
+  } catch (error) {
+    notice($('#gallery-error'), error.message || 'Enregistrement impossible.');
+  } finally {
+    saying(null);
+  }
+}
+
+/** Retrait d'un souvenir de l'album, avec ou sans message. */
+async function removeFromGallery(item, { quiet = false } = {}) {
+  try {
+    await api.removeMedia(item.id);
+    const node = el.mosaic.querySelector(`[data-id="${item.id}"]`);
+    if (node) await flyOut(node);
+    state.gallery.items = state.gallery.items.filter((i) => i.id !== item.id);
+    state.picked.delete(item.id);
+    state.gallery.total = Math.max(state.gallery.total - 1, 0);
+    return true;
+  } catch (error) {
+    if (!quiet) notice($('#gallery-error'), error.message || 'Retrait impossible.');
+    return false;
+  }
 }
 
 /* ─── Visionneuse ──────────────────────────────────────────────── */
@@ -864,8 +1062,8 @@ function openViewer(item) {
   }
 
   $('#viewer-author').textContent = item.mine ? `Votre souvenir — ${item.author}` : `Envoyé par ${item.author}`;
-  const remove = $('#viewer-remove');
-  remove.hidden = !item.mine;
+  $('#viewer-remove').hidden = !item.mine;
+  $('#viewer-save-label').textContent = canShareFiles() ? 'Enregistrer' : 'Télécharger';
 
   // Ce qui appartient à quelqu'un d'autre se regarde, ne se retouche pas.
   let locked = viewer.querySelector('.viewer-locked');
@@ -896,28 +1094,28 @@ function closeViewer() {
 $('#viewer-close').addEventListener('click', closeViewer);
 viewer.addEventListener('click', (event) => { if (event.target === viewer) closeViewer(); });
 
+$('#viewer-save').addEventListener('click', () => {
+  if (viewerItem) saveItems([viewerItem]);
+});
+
 $('#viewer-remove').addEventListener('click', () => {
   const item = viewerItem;
   if (!item?.mine) return;
   confirmDialog({
     title: 'Retirer ce souvenir',
-    text: 'Il sera définitivement effacé de l’album et du stockage des mariés. Cette action ne peut pas être annulée.',
+    text: 'Il sera définitivement effacé de l’album et du stockage des mariés.',
     confirmLabel: 'Oui, retirer',
     onConfirm: async () => {
-      try {
-        await api.removeMedia(item.id);
+      // La confirmation s'affiche par-dessus la visionneuse : l'invité n'a
+      // pas à en sortir, et elle se referme d'elle-même une fois le geste fait.
+      const done = await removeFromGallery(item);
+      if (done) {
         closeViewer();
-        const node = el.mosaic.querySelector(`[data-id="${item.id}"]`);
-        if (node) await flyOut(node);
-        state.gallery.items = state.gallery.items.filter((i) => i.id !== item.id);
-        state.gallery.total = Math.max(state.gallery.total - 1, 0);
         paintGalleryCounts({
           total: state.gallery.total,
           photos: state.gallery.items.filter((i) => i.kind === 'photo').length,
           videos: state.gallery.items.filter((i) => i.kind === 'video').length,
         });
-      } catch (error) {
-        notice($('#gallery-error'), error.message || 'Retrait impossible.');
       }
     },
   });
