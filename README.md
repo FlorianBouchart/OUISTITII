@@ -387,7 +387,7 @@ L'espace des mariés : `http://localhost:5185/admin.html`
 5. Obtenir le jeton de renouvellement :
 
 ```bash
-npm run google:token -- <CLIENT_ID> <CLIENT_SECRET>
+npm run google:token
 ```
 
 Une page Google s'ouvre, on autorise, le jeton s'affiche dans le terminal.

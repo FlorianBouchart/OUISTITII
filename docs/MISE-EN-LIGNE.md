@@ -121,22 +121,45 @@ Colonne de gauche → **Clients** (anciennement *Identifiants*).
 
 ### 1.7 Récupérer le jeton
 
+> **Ces trois valeurs sont à vous et ne doivent être communiquées à personne.**
+> Ni à moi, ni dans un message, ni dans un fichier partagé. Tapez-les vous-même
+> dans votre terminal : elles ne sortiront pas de votre ordinateur, sauf vers
+> Google.
+
 Dans le terminal, à la racine du projet :
 
 ```bash
-npm run google:token -- VOTRE_ID_CLIENT VOTRE_SECRET
+npm run google:token
 ```
 
-Une page Google s'ouvre :
+Le script demande l'**ID client**, puis le **code secret** (masqué à la frappe).
+Rien n'est enregistré sur le disque.
+
+Une page Google s'ouvre alors :
 
 - Choisissez votre compte
-- Un écran rouge dit **« Google n'a pas validé cette application »** — c'est
-  normal, elle est en mode test. Cliquez **Paramètres avancés**, puis
-  **Accéder à OUISTITII (non sécurisé)**
+- Un écran dit **« Google n'a pas validé cette application »** — c'est normal,
+  elle est en mode test et vous en êtes le seul utilisateur autorisé.
+  Cliquez **Paramètres avancés**, puis **Accéder à OUISTITII (non sécurisé)**
 - **Autoriser**
 
-Le terminal affiche alors une longue suite de caractères commençant par `1//`.
-C'est votre **jeton de renouvellement**. Gardez-le sous la main.
+Le terminal affiche une longue suite commençant par `1//`. C'est le **jeton de
+renouvellement**. Gardez la fenêtre ouverte le temps de l'étape suivante.
+
+### À quoi servent ces trois valeurs
+
+| Valeur | Ce qu'elle permet | Si elle fuitait |
+|---|---|---|
+| **ID client** | identifier l'application auprès de Google | peu grave, elle est semi-publique |
+| **Code secret** | prouver que c'est bien votre application | à renouveler : *Clients* → supprimer le client, en recréer un |
+| **Jeton de renouvellement** | déposer des fichiers dans votre Drive | à révoquer : [myaccount.google.com/permissions](https://myaccount.google.com/permissions) → OUISTITII → *Supprimer l'accès* |
+
+Même dans le pire des cas, la casse reste limitée : la portée `drive.file` ne
+donne accès **qu'aux fichiers déposés par l'application**. Le reste de votre
+Drive — documents, photos personnelles, sauvegardes — demeure hors de portée.
+
+Une fois les trois valeurs enregistrées dans Cloudflare (étape 2.3), elles y
+sont chiffrées : même vous ne pourrez plus les relire, seulement les remplacer.
 
 ---
 

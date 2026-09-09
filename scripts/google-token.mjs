@@ -5,18 +5,56 @@
  * sans jamais leur redemander de se connecter. Il ne s'obtient qu'une fois, et
  * ne quitte ensuite jamais les secrets du Worker.
  *
- *   node scripts/google-token.mjs <CLIENT_ID> <CLIENT_SECRET>
+ *   npm run google:token
  *
- * Le script ouvre une page d'autorisation, attend le retour de Google, et
- * affiche le jeton à recopier dans `wrangler secret put GOOGLE_REFRESH_TOKEN`.
+ * Le script demande les identifiants, ouvre une page d'autorisation, attend le
+ * retour de Google, puis affiche le jeton à recopier dans
+ * `wrangler secret put GOOGLE_REFRESH_TOKEN`.
+ *
+ * Rien n'est écrit sur le disque : ni les identifiants, ni le jeton.
  */
 
 import http from 'node:http';
+import readline from 'node:readline';
 import { exec } from 'node:child_process';
 
-const [clientId, clientSecret] = process.argv.slice(2);
+/**
+ * Les identifiants sont demandés à la saisie plutôt que passés en arguments :
+ * une ligne de commande reste dans l'historique du terminal, et s'affiche dans
+ * la liste des processus. Le secret est masqué pendant la frappe.
+ */
+function demander(question, masquer = false) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+    if (masquer) {
+      const write = rl._writeToOutput.bind(rl);
+      rl._writeToOutput = (chaine) => {
+        if (chaine.includes(question)) write(chaine);
+        else rl.output.write('*');
+      };
+    }
+
+    rl.question(question, (reponse) => {
+      if (masquer) rl.output.write('\n');
+      rl.close();
+      resolve(reponse.trim());
+    });
+  });
+}
+
+const [argId, argSecret] = process.argv.slice(2);
+
+console.log('\n═══ Autorisation Google Drive ═══');
+console.log('\nCes deux valeurs viennent de Google Cloud → Clients.');
+console.log('Elles restent sur cet ordinateur : elles ne sont ni enregistrées,');
+console.log('ni envoyées ailleurs qu\'à Google.\n');
+
+const clientId = argId || (await demander('ID client        : '));
+const clientSecret = argSecret || (await demander('Code secret      : ', true));
+
 if (!clientId || !clientSecret) {
-  console.error('Usage : node scripts/google-token.mjs <CLIENT_ID> <CLIENT_SECRET>');
+  console.error('\nIl manque une des deux valeurs.');
   process.exit(1);
 }
 
