@@ -155,11 +155,7 @@ img { display: block; max-width: 100%; }
   z-index: 1;
 }
 .screen.active { display: flex; }
-.screen.entering > * { animation: screenIn .58s var(--ease-out) both; }
-@keyframes screenIn {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+
 
 /* ═══ EN-TÊTE ═══════════════════════════════════════════════════ */
 .topbar {
@@ -595,21 +591,15 @@ img { display: block; max-width: 100%; }
 }
 @media (min-width: 560px) { .queue { grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); } }
 
+/* L'entrée et la sortie des vignettes sont pilotées par le script : une
+   animation CSS ici l'emporterait sur les transformations posées en ligne
+   (les animations priment sur le style inline) et remettrait tout d'aplomb. */
 .tile {
   position: relative;
   aspect-ratio: 1;
   background: var(--cream3);
   overflow: hidden;
   border: 1px solid var(--border);
-  animation: tileIn .42s var(--ease-spring) both;
-}
-@keyframes tileIn {
-  from { opacity: 0; transform: scale(.86); }
-  to   { opacity: 1; transform: scale(1); }
-}
-.tile.leaving { animation: tileOut .3s var(--ease-out) forwards; }
-@keyframes tileOut {
-  to { opacity: 0; transform: scale(.86); }
 }
 .tile img {
   width: 100%; height: 100%;
@@ -1034,7 +1024,7 @@ img { display: block; max-width: 100%; }
   flex: 1;
   position: relative;
   z-index: 1;
-  min-height: 42px;
+  min-height: 46px;
   font-family: var(--font-sub);
   font-size: .7rem;
   letter-spacing: .12em;
@@ -1295,6 +1285,8 @@ img { display: block; max-width: 100%; }
   letter-spacing: .06em;
 }
 
-/* Le laisser-aller du polaroïd : chaque vignette est posée un peu de travers. */
-.tile { transform: rotate(var(--tilt, 0deg)); will-change: transform; }
+/* Le laisser-aller du polaroïd : chaque vignette est posée un peu de travers.
+   L'angle est appliqué par le script (data-tilt) — le déclarer aussi ici
+   entrerait en conflit avec les transformations de l'animation. */
+.tile { will-change: transform; }
 .queue { overflow: visible; }

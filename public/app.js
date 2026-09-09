@@ -99,6 +99,8 @@ function notice(node, message, tone = 'alert') {
   node.querySelector('span').textContent = message;
   node.classList.toggle('notice-alert', tone === 'alert');
   node.classList.toggle('notice-info', tone === 'info');
+  // Un point d'exclamation sur une simple information donnerait l'alerte à tort.
+  node.querySelector('use')?.setAttribute('href', tone === 'info' ? '#i-info' : '#i-alert');
   node.hidden = false;
 }
 
@@ -453,7 +455,8 @@ function buildTile(item) {
   tile.className = 'tile';
   tile.dataset.id = item.id;
   tile.dataset.tilt = item.tilt || 0;
-  tile.style.setProperty('--tilt', `${item.tilt || 0}deg`);
+  // Posé tout de suite : une vignette rendue hors animation doit déjà pencher.
+  tile.style.transform = `rotate(${item.tilt || 0}deg)`;
   tile.setAttribute('role', 'listitem');
   tile.innerHTML = `
     <div class="tile-fallback"><svg aria-hidden="true"><use href="#i-${

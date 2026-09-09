@@ -130,7 +130,15 @@ function guaranteeVisible(tween, targets, after = 1400) {
   const timer = setTimeout(() => {
     if (tween && tween.progress() >= 1) return;
     tween?.kill();
-    gsap.set(targets, { opacity: 1, x: 0, y: 0, scale: 1, rotate: 0, clearProps: 'transform' });
+    gsap.set(targets, {
+      opacity: 1,
+      x: 0,
+      y: 0,
+      scale: 1,
+      // On repose l'inclinaison voulue plutôt que de tout remettre droit :
+      // sans cela, les vignettes perdraient leur pose de polaroïd.
+      rotate: (i, el) => Number(el.dataset.tilt || 0),
+    });
   }, after);
   tween?.eventCallback('onComplete', () => clearTimeout(timer));
   return tween;
