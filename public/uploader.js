@@ -115,6 +115,9 @@ export class Uploader {
         head: item.head,
         source: item.source,
         takenAt: item.takenAt,
+        width: item.width,
+        height: item.height,
+        duration: item.duration,
       });
 
       if (plan.duplicate) {
@@ -144,6 +147,9 @@ export class Uploader {
     item.progress = 1;
     item.storedSize = result?.size ?? item.size;
     this.onItemChange(item);
+
+    // L'aperçu part après coup : l'album se remplit sans ralentir l'envoi.
+    if (item.thumbBlob) api.putThumb(item.mediaId, item.thumbBlob);
   }
 
   /* ─── Fichier d'une seule pièce ──────────────────────────────── */

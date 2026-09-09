@@ -61,6 +61,7 @@ export class ApiError extends Error {
 /* ─── Requêtes ─────────────────────────────────────────────────── */
 
 async function request(path, { method = 'POST', body, signal, raw } = {}) {
+  // GET et DELETE n'ont pas de corps : on ne pose pas de content-type inutile.
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined && !raw) headers['content-type'] = 'application/json';
@@ -115,5 +116,26 @@ export const failUpload = (mediaId, error, abandon = false) =>
 
 export const relayUrl = (mediaId, partNumber) =>
   `/api/relay/${mediaId}${partNumber ? `/${partNumber}` : ''}`;
+
+/**
+ * La vignette que le téléphone a déjà fabriquée pour sa propre file : on la
+ * dépose telle quelle, c'est elle qui fera vivre l'album partagé.
+ * Best effort — un souvenir sans vignette reste un souvenir bien arrivé.
+ */
+export async function putThumb(mediaId, blob) {
+  try {
+    await fetch(`/api/media/${mediaId}/thumb`, {
+      method: 'PUT',
+      headers: { 'content-type': 'image/jpeg', ...authHeader() },
+      body: blob,
+    });
+  } catch { /* sans conséquence sur l'envoi */ }
+}
+
+export const gallery = (params) =>
+  request(`/api/gallery?${new URLSearchParams(params)}`, { method: 'GET' });
+
+export const removeMedia = (mediaId) =>
+  request(`/api/media/${mediaId}`, { method: 'DELETE' });
 
 export const authHeader = () => (token ? { authorization: `Bearer ${token}` } : {});

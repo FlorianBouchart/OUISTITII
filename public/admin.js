@@ -141,16 +141,15 @@ function buildCell(item) {
   const cell = document.createElement('div');
   cell.className = 'cell';
 
-  if (item.kind === 'photo' && item.status === 'stored') {
+  if (item.has_thumb && item.status === 'stored') {
+    // On affiche l'aperçu léger, jamais l'original : avec deux mille photos,
+    // charger les fichiers pleins mettrait la page à genoux.
     const img = document.createElement('img');
     img.loading = 'lazy';
     img.decoding = 'async';
     img.alt = '';
-    // Le fichier est privé : on l'obtient via le Worker, puis on l'affiche depuis un blob.
-    call(`/api/admin/media/${item.id}/file`)
-      .then((r) => r.blob())
-      .then((blob) => { img.src = URL.createObjectURL(blob); })
-      .catch(() => { cell.classList.add('cell-video'); });
+    img.src = `/api/media/${item.id}/thumb`;
+    img.addEventListener('error', () => { img.remove(); cell.classList.add('cell-video'); });
     cell.appendChild(img);
   } else {
     cell.classList.add('cell-video');

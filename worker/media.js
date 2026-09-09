@@ -12,10 +12,10 @@ import {
   json, bad, slugify, titleCase, safeName, uuid, nowISO,
   describeMime, magicMatches, rateLimit, clientIp,
 } from './util.js';
-import { issueGuestToken, requireGuest } from './auth.js';
+import { issueGuestToken, requireGuest, sessionCookie } from './auth.js';
 import {
   storageMode, beginUpload, signPartUrls, finishUpload, abortUpload,
-  relayPut, relayPart, headObject, deleteObject, partSizeOf, multipartThreshold,
+  relayPut, relayPart, headObject, getObject, deleteObject, partSizeOf, multipartThreshold,
 } from './storage.js';
 
 const maxFileBytes = (env) => Number(env.MAX_FILE_MB || 600) * 1024 * 1024;
@@ -58,23 +58,27 @@ export async function openSession(request, env) {
   const sessionId = uuid();
   const token = await issueGuestToken(env, contributor.id, sessionId);
 
-  return json({
-    token,
-    sessionId,
-    contributor: {
-      id: contributor.id,
-      slug: contributor.slug,
-      displayName: contributor.display_name,
-      mediaCount: contributor.media_count,
+  return json(
+    {
+      token,
+      sessionId,
+      contributor: {
+        id: contributor.id,
+        slug: contributor.slug,
+        displayName: contributor.display_name,
+        mediaCount: contributor.media_count,
+      },
+      config: {
+        maxFileBytes: maxFileBytes(env),
+        partSize: partSizeOf(env),
+        multipartThreshold: multipartThreshold(env),
+        transport: storageMode(env),
+        acceptedTypes: 'image/*,video/*',
+      },
     },
-    config: {
-      maxFileBytes: maxFileBytes(env),
-      partSize: partSizeOf(env),
-      multipartThreshold: multipartThreshold(env),
-      transport: storageMode(env),
-      acceptedTypes: 'image/*,video/*',
-    },
-  });
+    200,
+    { 'set-cookie': sessionCookie(token) }
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -165,13 +169,15 @@ export async function initUpload(request, env) {
   await env.DB.prepare(
     `INSERT INTO media
        (id, contributor_id, session_id, kind, mime, ext, size, original_name, storage_key,
-        fingerprint, source, taken_at, status, upload_id, part_size, parts_total, created_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,'pending',?13,?14,?15,?16)`
+        fingerprint, source, taken_at, width, height, duration,
+        status, upload_id, part_size, parts_total, created_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,'pending',?16,?17,?18,?19)`
   ).bind(
     mediaId, cid, sid, kind, mime, ext, size,
     String(body.name || '').slice(0, 160), key, fingerprint,
     body.source === 'camera' ? 'camera' : 'gallery',
     body.takenAt ? String(body.takenAt).slice(0, 40) : null,
+    posInt(body.width), posInt(body.height), posNum(body.duration),
     upload.uploadId || null, upload.partSize || null, upload.partsTotal || null, nowISO()
   ).run();
 
@@ -379,6 +385,169 @@ export async function relayUpload(request, env, mediaId, partNumber) {
   return json({ etag });
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   7. VIGNETTE — envoyée par le téléphone, qui l'a déjà fabriquée
+   ═══════════════════════════════════════════════════════════════ */
+
+const MAX_THUMB_BYTES = 260 * 1024;
+
+/**
+ * Le téléphone a produit une miniature pour sa propre file d'attente : on la
+ * récupère telle quelle. Aucun redimensionnement côté serveur, aucun service
+ * d'images à payer — et la galerie s'ouvre sans télécharger les originaux.
+ */
+export async function putThumb(request, env, mediaId) {
+  const { cid } = await requireGuest(request, env);
+  const row = await ownedMedia(env, cid, mediaId);
+
+  const length = Number(request.headers.get('content-length') || 0);
+  if (length > MAX_THUMB_BYTES) throw bad('thumb_too_large', 'Aperçu trop lourd.', 413);
+
+  // Une vignette ne se dépose qu'une fois : un souvenir arrivé ne se retouche
+  // plus, pas même par la petite porte de son aperçu.
+  if (row.thumb_key) throw bad('thumb_locked', 'Cet aperçu est déjà enregistré.', 409);
+
+  const key = `${env.EVENT_PREFIX || 'mariage'}/${env.EVENT_DATE || '2026-12-12'}/apercus/${mediaId}.jpg`;
+  const object = await env.MEDIA.put(key, request.body, {
+    httpMetadata: { contentType: 'image/jpeg' },
+  });
+  if (!object) throw bad('thumb_failed', 'Aperçu non enregistré.', 500);
+
+  await env.DB.prepare('UPDATE media SET thumb_key = ?2 WHERE id = ?1').bind(mediaId, key).run();
+  return json({ ok: true });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   8. GALERIE PARTAGÉE — tout le monde regarde, personne ne retouche
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Les souvenirs de tous les invités, du plus récent au plus ancien.
+ * Chaque entrée porte `mine` : seul son auteur verra le bouton de retrait.
+ */
+export async function listGallery(request, env, url) {
+  const { cid } = await requireGuest(request, env);
+
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 48), 1), 96);
+  const offset = Math.max(Number(url.searchParams.get('offset') || 0), 0);
+  const filter = url.searchParams.get('filter');
+
+  const where = ["m.status = 'stored'"];
+  const binds = [];
+  if (filter === 'mine') { binds.push(cid); where.push(`m.contributor_id = ?${binds.length}`); }
+  else if (filter === 'photo' || filter === 'video') {
+    binds.push(filter); where.push(`m.kind = ?${binds.length}`);
+  }
+
+  const { results } = await env.DB.prepare(
+    `SELECT m.id, m.kind, m.width, m.height, m.duration, m.completed_at,
+            m.thumb_key IS NOT NULL AS has_thumb,
+            m.contributor_id, c.display_name, c.first_name
+       FROM media m JOIN contributors c ON c.id = m.contributor_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY m.completed_at DESC
+      LIMIT ${limit} OFFSET ${offset}`
+  ).bind(...binds).all();
+
+  const total = await env.DB.prepare(
+    `SELECT COUNT(*) AS n, SUM(CASE WHEN kind='photo' THEN 1 ELSE 0 END) AS photos
+       FROM media WHERE status='stored'`
+  ).first();
+
+  return json({
+    items: results.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      width: r.width,
+      height: r.height,
+      duration: r.duration,
+      at: r.completed_at,
+      author: r.display_name,
+      authorFirst: r.first_name,
+      hasThumb: Boolean(r.has_thumb),
+      mine: r.contributor_id === cid,
+    })),
+    offset,
+    limit,
+    total: total?.n || 0,
+    photos: total?.photos || 0,
+    videos: (total?.n || 0) - (total?.photos || 0),
+  });
+}
+
+/** Aperçu ou original. Le seau reste privé : tout passe par ici, session en main. */
+export async function serveMedia(request, env, mediaId, variant) {
+  // Les invités y accèdent avec leur session ; les mariés avec la leur.
+  await requireGuest(request, env).catch(async (error) => {
+    const { requireAdmin } = await import('./auth.js');
+    return requireAdmin(request, env).catch(() => { throw error; });
+  });
+
+  const row = await env.DB.prepare(
+    `SELECT storage_key, thumb_key, mime, status FROM media WHERE id = ?1`
+  ).bind(mediaId).first();
+  if (!row || row.status !== 'stored') throw bad('media_unknown', 'Souvenir introuvable.', 404);
+
+  const wantsThumb = variant === 'thumb' && row.thumb_key;
+  const key = wantsThumb ? row.thumb_key : row.storage_key;
+
+  const object = await getObject(env, key);
+  if (!object) throw bad('media_missing', 'Fichier absent.', 404);
+
+  const headers = new Headers();
+  headers.set('content-type', wantsThumb ? 'image/jpeg' : row.mime || 'application/octet-stream');
+  headers.set('content-length', String(object.size));
+  // Un souvenir envoyé ne change jamais : le navigateur peut le garder longtemps.
+  headers.set('cache-control', 'private, max-age=604800, immutable');
+  headers.set('etag', object.httpEtag);
+  headers.set('content-disposition', 'inline');
+  headers.set('x-content-type-options', 'nosniff');
+
+  if (request.headers.get('if-none-match') === object.httpEtag) {
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(object.body, { headers });
+}
+
+/**
+ * Retrait d'un souvenir déjà arrivé.
+ *
+ * Règle voulue par les mariés : un souvenir envoyé n'est ni modifiable ni
+ * effaçable — sauf par celui qui l'a envoyé. On vérifie donc que la session
+ * appartient bien à l'auteur, et rien d'autre ne peut réécrire le fichier :
+ * plus aucune URL d'écriture n'est signée pour une clé déjà servie.
+ */
+export async function deleteOwnMedia(request, env, mediaId) {
+  const { cid } = await requireGuest(request, env);
+
+  const row = await env.DB.prepare('SELECT * FROM media WHERE id = ?1').bind(mediaId).first();
+  if (!row) throw bad('media_unknown', 'Souvenir introuvable.', 404);
+  if (row.contributor_id !== cid) {
+    throw bad(
+      'not_yours',
+      'Ce souvenir appartient à quelqu’un d’autre : seul son auteur peut le retirer.',
+      403
+    );
+  }
+
+  await deleteObject(env, row.storage_key).catch(() => {});
+  if (row.thumb_key) await deleteObject(env, row.thumb_key).catch(() => {});
+
+  const batch = [env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(mediaId)];
+  if (row.status === 'stored') {
+    batch.push(
+      env.DB.prepare(
+        `UPDATE contributors
+            SET media_count = MAX(media_count - 1, 0),
+                bytes_total = MAX(bytes_total - ?2, 0)
+          WHERE id = ?1`
+      ).bind(cid, row.stored_size || 0)
+    );
+  }
+  await env.DB.batch(batch);
+  return json({ ok: true });
+}
+
 /* ─── Outils ───────────────────────────────────────────────────── */
 
 async function ownedMedia(env, contributorId, mediaId) {
@@ -387,6 +556,9 @@ async function ownedMedia(env, contributorId, mediaId) {
   if (!row) throw bad('media_unknown', 'Souvenir introuvable.', 404);
   return row;
 }
+
+const posInt = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.round(Number(v)) : null);
+const posNum = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
 
 async function readJson(request) {
   try {

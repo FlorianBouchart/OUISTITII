@@ -80,6 +80,7 @@ export async function listMedia(request, env, url) {
   const { results } = await env.DB.prepare(
     `SELECT m.id, m.kind, m.mime, m.original_name, m.storage_key, m.stored_size, m.size,
             m.created_at, m.completed_at, m.taken_at, m.source, m.status, m.error,
+            m.thumb_key IS NOT NULL AS has_thumb,
             c.display_name, c.slug
        FROM media m JOIN contributors c ON c.id = m.contributor_id
       WHERE ${where.join(' AND ')}
@@ -125,6 +126,7 @@ export async function deleteMedia(request, env, mediaId) {
     });
   }
   await deleteObject(env, row.storage_key);
+  if (row.thumb_key) await deleteObject(env, row.thumb_key).catch(() => {});
 
   const batch = [env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(mediaId)];
   if (row.status === 'stored') {
@@ -182,7 +184,7 @@ export async function cleanupStale(request, env) {
   await requireAdmin(request, env);
   const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   const { results } = await env.DB.prepare(
-    `SELECT id, storage_key, upload_id FROM media
+    `SELECT id, storage_key, thumb_key, upload_id FROM media
       WHERE status IN ('pending','uploading','failed') AND created_at < ?1 LIMIT 200`
   ).bind(cutoff).all();
 
@@ -195,6 +197,7 @@ export async function cleanupStale(request, env) {
       });
     }
     await deleteObject(env, row.storage_key).catch(() => {});
+    if (row.thumb_key) await deleteObject(env, row.thumb_key).catch(() => {});
     await env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(row.id).run();
   }
   return json({ ok: true, cleaned: results.length });

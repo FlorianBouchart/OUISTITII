@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS media (
   fingerprint    TEXT NOT NULL,             -- empreinte anti-doublon (par contributeur)
   source         TEXT NOT NULL DEFAULT 'gallery' CHECK (source IN ('camera','gallery')),
   taken_at       TEXT,                      -- date du fichier côté téléphone
+  thumb_key      TEXT,                      -- vignette pour la galerie partagée
+  width          INTEGER,
+  height         INTEGER,
+  duration       REAL,                      -- secondes, pour les vidéos
   status         TEXT NOT NULL DEFAULT 'pending'
                  CHECK (status IN ('pending','uploading','stored','failed','rejected','deleted')),
   upload_id      TEXT,                      -- multipart S3 en cours
@@ -47,6 +51,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS media_dedup
 CREATE INDEX IF NOT EXISTS media_by_contributor ON media (contributor_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS media_by_status      ON media (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS media_by_kind        ON media (kind, created_at DESC);
+-- La galerie partagée lit toujours « les souvenirs arrivés, du plus récent au plus ancien ».
+CREATE INDEX IF NOT EXISTS media_gallery         ON media (status, completed_at DESC);
 
 -- Garde-fou anti-abus : compteurs par fenêtre glissante
 CREATE TABLE IF NOT EXISTS rate_limit (

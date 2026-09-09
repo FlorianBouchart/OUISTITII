@@ -8,6 +8,7 @@ import { json, AppError, purgeRateLimits } from './util.js';
 import {
   openSession, checkFingerprints, initUpload, morePartUrls,
   completeUpload, failUpload, relayUpload,
+  putThumb, listGallery, serveMedia, deleteOwnMedia,
 } from './media.js';
 import {
   adminLogin, overview, listMedia, downloadMedia, deleteMedia, exportCsv, cleanupStale,
@@ -60,12 +61,26 @@ async function route(request, env, url, ctx) {
   if (path === '/api/media/check' && method === 'POST') return checkFingerprints(request, env);
   if (path === '/api/media/init' && method === 'POST') return initUpload(request, env);
 
-  if (segments[0] === 'api' && segments[1] === 'media' && segments.length === 4 && method === 'POST') {
+  if (segments[0] === 'api' && segments[1] === 'media' && segments.length === 4) {
     const [, , mediaId, action] = segments;
-    if (action === 'parts') return morePartUrls(request, env, mediaId);
-    if (action === 'complete') return completeUpload(request, env, mediaId);
-    if (action === 'fail') return failUpload(request, env, mediaId);
+    if (method === 'POST') {
+      if (action === 'parts') return morePartUrls(request, env, mediaId);
+      if (action === 'complete') return completeUpload(request, env, mediaId);
+      if (action === 'fail') return failUpload(request, env, mediaId);
+    }
+    if (method === 'PUT' && action === 'thumb') return putThumb(request, env, mediaId);
+    // Galerie : aperçu et original, servis depuis le seau privé.
+    if (method === 'GET' && (action === 'thumb' || action === 'file')) {
+      return serveMedia(request, env, mediaId, action);
+    }
   }
+
+  // Un souvenir arrivé ne se retire que par la main qui l'a envoyé.
+  if (segments[0] === 'api' && segments[1] === 'media' && segments.length === 3 && method === 'DELETE') {
+    return deleteOwnMedia(request, env, segments[2]);
+  }
+
+  if (path === '/api/gallery' && method === 'GET') return listGallery(request, env, url);
 
   // Relais : PUT /api/relay/<mediaId>[/<numéro de partie>]
   if (segments[0] === 'api' && segments[1] === 'relay' && method === 'PUT') {

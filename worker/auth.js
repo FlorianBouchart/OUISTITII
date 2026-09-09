@@ -88,10 +88,33 @@ export const issueGuestToken = (env, contributorId, sessionId) =>
 
 export const issueAdminToken = (env) => issueToken(env, { role: 'admin' }, ADMIN_TTL);
 
+export const SESSION_COOKIE = 'oui_session';
+
 function bearerOf(request) {
   const header = request.headers.get('authorization') || '';
-  return header.startsWith('Bearer ') ? header.slice(7).trim() : null;
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  // Les balises <img> ne peuvent pas porter d'en-tête Authorization : la galerie
+  // s'appuie donc sur un cookie, posé en même temps que le jeton.
+  return cookieOf(request, SESSION_COOKIE);
 }
+
+function cookieOf(request, name) {
+  const jar = request.headers.get('cookie');
+  if (!jar) return null;
+  for (const part of jar.split(';')) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key === name) return rest.join('=');
+  }
+  return null;
+}
+
+/** Cookie de session : inaccessible au JavaScript, non transmis aux sites tiers. */
+export function sessionCookie(token, maxAgeSeconds = GUEST_TTL) {
+  return `${SESSION_COOKIE}=${token}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; Secure; SameSite=Strict`;
+}
+
+export const clearedSessionCookie = () =>
+  `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
 
 /** Session invité obligatoire. Lève une erreur explicite si elle a expiré. */
 export async function requireGuest(request, env) {

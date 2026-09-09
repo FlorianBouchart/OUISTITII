@@ -44,6 +44,41 @@ export async function headBytes(file) {
   return btoa(binary);
 }
 
+/* ─── Dimensions d'origine ─────────────────────────────────────── */
+
+/**
+ * Largeur et hauteur lues directement dans l'en-tête du fichier — quelques
+ * octets, aucun décodage. La miniature, elle, est redimensionnée à la volée :
+ * ses dimensions ne diraient rien de la photo d'origine.
+ * Couvre JPEG et PNG ; ailleurs on préfère ne rien affirmer.
+ */
+export async function readPixelSize(file) {
+  try {
+    const head = new DataView(await file.slice(0, 64 * 1024).arrayBuffer());
+    if (head.byteLength < 24) return null;
+
+    // PNG : bloc IHDR, largeur et hauteur en clair aux octets 16 à 23
+    if (head.getUint32(0) === 0x89504e47) {
+      return { width: head.getUint32(16), height: head.getUint32(20) };
+    }
+
+    // JPEG : on parcourt les marqueurs jusqu'au segment SOF qui porte la taille
+    if (head.getUint16(0) === 0xffd8) {
+      let offset = 2;
+      while (offset + 9 < head.byteLength) {
+        if (head.getUint8(offset) !== 0xff) { offset++; continue; }
+        const marker = head.getUint8(offset + 1);
+        // SOF0..SOF15, hors marqueurs de découpage (DHT, JPG, DAC)
+        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+          return { height: head.getUint16(offset + 5), width: head.getUint16(offset + 7) };
+        }
+        offset += 2 + head.getUint16(offset + 2);
+      }
+    }
+  } catch { /* format inconnu : on s'abstient */ }
+  return null;
+}
+
 /* ─── Miniatures ───────────────────────────────────────────────── */
 
 const canRescale = typeof createImageBitmap === 'function';
@@ -100,6 +135,7 @@ async function videoThumb(file) {
     });
 
     if (!frame || !video.videoWidth) return { blob: null, duration };
+    const size = { width: video.videoWidth, height: video.videoHeight };
 
     const side = Math.min(video.videoWidth, video.videoHeight);
     const canvas = document.createElement('canvas');
@@ -111,7 +147,7 @@ async function videoThumb(file) {
       0, 0, THUMB_SIZE, THUMB_SIZE
     );
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.72));
-    return { blob, duration };
+    return { blob, duration, ...size };
   } finally {
     video.removeAttribute('src');
     video.load?.();

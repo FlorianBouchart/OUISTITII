@@ -8,7 +8,9 @@ vérifie, envoie. Rien d'autre. Les fichiers atterrissent dans un stockage priv�
 appartient aux mariés.
 
 ```
-Bienvenue  →  Qui nous écrit ?  →  Ajouter · vérifier · retirer  →  Envoyer  →  C'est arrivé
+Bienvenue → Qui nous écrit ? → Ajouter · vérifier · retirer → Envoyer → C'est arrivé
+                                        ↕
+                                    L'album de tout le monde
 ```
 
 ---
@@ -28,6 +30,8 @@ Bienvenue  →  Qui nous écrit ?  →  Ajouter · vérifier · retirer  →  En
 | Coupure réseau | Pause automatique, reprise au retour du réseau, 4 tentatives espacées. |
 | Fermeture accidentelle | Fichiers et progression conservés dans IndexedDB, restaurés au retour. |
 | Confirmation | Décompte photos / vidéos, et retour immédiat vers « ajouter d'autres souvenirs ». |
+| Album partagé | Les souvenirs de tous les invités, filtrables, en aperçus légers. |
+| Verrouillage | Un souvenir arrivé n'est plus modifiable — seul son auteur peut le retirer. |
 
 **Côté mariés** (`public/admin.html`) — protégé par mot de passe : totaux, poids,
 répartition par invité, aperçu et téléchargement fichier par fichier, suppression,
@@ -80,14 +84,17 @@ worker/
   auth.js       jetons HMAC-SHA256
   util.js       validation, empreintes de type, garde-fous anti-abus
 public/
-  index.html    les quatre écrans
-  app.js        parcours, file d'attente, rendu
+  index.html    les cinq écrans
+  motion.js     rideau de passage, mascotte vivante, micro-interactions
+  vendor/       GSAP, servi en local (la CSP interdit les scripts externes)
+  app.js        parcours, file d'attente, album, rendu
   uploader.js   moteur d'envoi (parties, reprise, tentatives)
   media-tools.js empreintes, miniatures, cadence
   store.js      persistance IndexedDB
   api.js        client de l'API
   admin.html/js/css   espace des mariés
   app.css       la direction artistique
+  assets/       polices sous-ensemblées, logos, toile de Jouy, mascotte
 scripts/
   verify-signature.mjs   éprouve la signature SigV4 (`npm run verify`)
 schema.sql      base D1
@@ -96,6 +103,70 @@ schema.sql      base D1
 **Pourquoi pas de framework ?** Les sites du mariage sont en HTML/CSS/JS. L'application
 en hérite : même vocabulaire, même méthode, et un poids qui compte quand un invité
 ouvre le lien sur un réseau saturé par deux cents personnes dans la même salle.
+
+---
+
+## 2 bis. L'identité OUISTITII
+
+« Ouistiti », c'est le mot qu'on dit pour sourire sur les photos. La marque part
+de là et l'application le rappelle dès la première phrase.
+
+**La mascotte** (`public/assets/ouistiti.svg`) est un ouistiti à pinceaux dessiné
+au trait, dans l'esprit des gravures de la toile de Jouy : touffes d'oreilles,
+grands yeux, large sourire, et une queue annelée calculée en spirale. Elle n'est
+pas un décor — elle réagit. Elle cligne des yeux au repos, suit du regard ce que
+l'invité écrit, sursaute quand des photos arrivent, sourit franchement à l'envoi.
+
+**La queue est le rideau de passage.** À chaque changement d'écran, un voile navy
+monte du bas avec un bord bombé, la queue s'y dessine en or, la frimousse
+apparaît avec un mot — « Enchantés », « Ouistiti ! », « L'album » — puis tout se
+retire vers le haut. Aucun écran ne change d'un coup sec.
+
+**Les autres gestes** : le mot OUISTITII s'écrit lettre par lettre ; un trait d'or
+se remplit sous les champs pendant la frappe et la signature se trace en dessous
+en Parfumerie Script ; les vignettes tombent en cascade, chacune posée un peu de
+travers comme un polaroïd ; un flash d'appareil photo éclate sur chaque souvenir
+au moment où il arrive ; les compteurs finaux grimpent ; le sceau se dessine
+trait par trait. Sur ordinateur, les boutons principaux sont légèrement
+magnétiques.
+
+Le tout est piloté par **GSAP, servi en local** (`public/vendor/`) — la politique
+de sécurité de contenu interdit tout script externe.
+
+### Une règle qui gouverne toutes les animations
+
+GSAP avance au rythme des images écran. Or celles-ci s'arrêtent net quand
+l'onglet passe en arrière-plan ou que le téléphone se verrouille — cas très
+banal dans une soirée. Une animation d'apparition qui commence par masquer son
+contenu laisserait alors un écran vide, et un rideau resterait tiré pour de bon.
+
+Chaque animation qui masque, couvre ou bloque porte donc un **garde-fou** : passé
+son temps prévu, l'état final est posé d'office. Le rideau se retire, le contenu
+s'affiche, le retrait aboutit, les compteurs affichent leur vrai chiffre. Une
+animation peut échouer ; l'application, jamais.
+
+---
+
+## 2 ter. Qui peut faire quoi
+
+| | Voir l'album | Envoyer | Modifier un souvenir | Le retirer |
+|---|---|---|---|---|
+| Un invité identifié | oui, tout l'album | oui | **jamais** | ses souvenirs uniquement |
+| Un autre invité | oui | oui | **jamais** | non — refus explicite |
+| Sans session | non | non | non | non |
+| Les mariés | oui | — | **jamais** | oui, partout |
+
+Un souvenir arrivé est **définitif**. Aucune URL d'écriture n'est plus signée
+pour sa clé, le relais le refuse, et son aperçu ne peut être déposé qu'une seule
+fois. Renvoyer le même fichier est reconnu comme un doublon, pas comme un
+remplacement. La seule action encore possible est la suppression, réservée à
+l'auteur — les mariés gardant la main sur leur propre stockage.
+
+L'auteur est reconnu par sa session, ouverte avec son prénom et son nom. C'est un
+choix assumé : pas de mot de passe, donc pas de friction le jour J. Quelqu'un qui
+saisirait exactement le même prénom et le même nom qu'un autre invité hériterait
+de ses droits — accepté ici, entre convives d'un mariage, contre le coût d'une
+inscription pour deux cents personnes.
 
 ---
 
@@ -151,6 +222,10 @@ assemblage nettement plus lourd.
 - **En-têtes** : CSP stricte (aucun script externe), `frame-ancestors 'none'`,
   `nosniff`, HSTS, `Permissions-Policy`.
 - **Taille maximale** par fichier : 600 Mo (`MAX_FILE_MB`).
+- **Cookie de session** `HttpOnly; Secure; SameSite=Strict`, en plus du jeton :
+  les balises `<img>` de l'album ne peuvent pas porter d'en-tête d'autorisation,
+  et un jeton en paramètre d'URL fuirait dans les journaux.
+- **Écriture verrouillée après arrivée** : voir « Qui peut faire quoi » ci-dessus.
 
 ---
 
@@ -244,6 +319,19 @@ Testé de bout en bout sur le Worker local, en émulation iPhone :
   avec leurs miniatures ;
 - retrait individuel, retrait global, changement d'identité ;
 - espace des mariés : totaux, tableau par invité, aperçus, suppression, CSV ;
+- **album partagé** : les souvenirs de tous s'affichent en aperçus légers, filtres
+  compris, et le compteur suit ;
+- **permissions** : un invité voit tout l'album mais reçoit un refus explicite
+  (403) s'il tente de retirer le souvenir d'un autre ; sans session, tout est
+  fermé (401) ;
+- **immuabilité** : réécriture par le relais refusée (409), aperçu non
+  remplaçable (409), même fichier renvoyé reconnu comme doublon, tentative sur le
+  média d'autrui rejetée (404) ;
+- **retrait par l'auteur** : confirmation, effacement du fichier et de son aperçu,
+  album mis à jour ;
+- **animations sans images écran** : rideau, apparitions, retraits et compteurs
+  aboutissent quand même — vérifié dans un navigateur où `requestAnimationFrame`
+  ne tourne pas du tout ;
 - accessibilité : contrastes tous ≥ 4,5:1, cibles tactiles ≥ 44 px ;
 - `npm run verify` : signature SigV4 conforme au vecteur de test officiel d'AWS et à une
   seconde implémentation indépendante (clés accentuées et `uploadId` exotiques compris).
@@ -262,4 +350,9 @@ du texte lu dehors ou dans une salle sombre. Un or plus profond (`--gold-text: #
 4,7:1) sert aux libellés ; l'or d'origine reste aux filets et aux ornements.
 
 Polices sous-ensemblées et converties en WOFF2 : 384 Ko d'habillage complet, toile de
-Jouy comprise.
+Jouy comprise. La mascotte est un SVG au trait de 5 Ko, inline pour être animable.
+
+Le registre, lui, a été assoupli à la demande : moins de hiérarchie, plus de jeu.
+Des onglets à curseur glissant, des filtres en pastilles, des vignettes posées de
+travers, une mascotte qui réagit — l'application se comporte comme une
+application photo, sans quitter la papeterie du mariage.
