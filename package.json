@@ -10,7 +10,7 @@
     "db:migrate": "./node_modules/.bin/wrangler d1 execute ouistitii --local --file=schema.sql",
     "db:migrate:remote": "./node_modules/.bin/wrangler d1 execute ouistitii --remote --file=schema.sql",
     "deploy": "./node_modules/.bin/wrangler deploy",
-    "dev": "./node_modules/.bin/wrangler dev --port 5185 --r2 MEDIA",
+    "dev": "node scripts/dev-config.mjs && ./node_modules/.bin/wrangler dev --config wrangler.dev.toml --port 5185",
     "google:token": "node scripts/google-token.mjs",
     "login": "./node_modules/.bin/wrangler login",
     "logout": "./node_modules/.bin/wrangler logout",

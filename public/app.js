@@ -16,6 +16,7 @@ import {
 import {
   canShareFiles, prepareFiles, shareFiles, downloadFile, totalBytes, BATCH,
 } from './export.js';
+import { Viewfinder, cameraAvailable } from './camera.js';
 import {
   curtain, riseIn, spellOut, Mascot, flash, dropIn, flyOut, popSay,
   magnetize, countTo, drawSeal, reducedMotion,
@@ -237,7 +238,45 @@ const inputs = {
   gallery: $('#input-gallery'),
 };
 
-$('#btn-photo').addEventListener('click', () => openPicker('photo', 'camera'));
+/**
+ * Le viseur intégré plutôt que l'appareil du téléphone : celui-ci impose une
+ * confirmation par photo, ce qui interdit de mitrailler. Ici, chaque appui
+ * saisit une image et rien ne s'interpose.
+ */
+$('#btn-photo').addEventListener('click', () => openViewfinder());
+$('#btn-photo-native').addEventListener('click', () => openPicker('photo', 'camera'));
+
+let viewfinder = null;
+
+async function openViewfinder() {
+  if (viewfinder) return;
+  notice(el.addError, null);
+
+  if (!cameraAvailable()) {
+    // Contexte non sécurisé ou navigateur sans accès caméra : on retombe sur
+    // l'appareil du téléphone, qui marche partout.
+    openPicker('photo', 'camera');
+    return;
+  }
+
+  const pending = [];
+  viewfinder = new Viewfinder({
+    onShot: (file) => pending.push(file),
+    onError: (message) => {
+      viewfinder = null;
+      notice(el.addError, message);
+    },
+    onClose: async (total) => {
+      viewfinder = null;
+      if (!pending.length) return;
+      await addFiles(pending, 'camera');
+      if (total > 1) popSay(`${total} photos !`);
+    },
+  });
+
+  const started = await viewfinder.start();
+  if (!started) viewfinder = null;
+}
 $('#btn-video').addEventListener('click', () => openPicker('video', 'camera'));
 $('#btn-gallery').addEventListener('click', () => openPicker('gallery', 'gallery'));
 

@@ -15,7 +15,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" as="font" type="font/woff2" href="assets/TANAngleton-Regular.woff2?v=2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="assets/DMSans-latin.woff2?v=2" crossorigin>
-<link rel="stylesheet" href="app.css?v=6">
+<link rel="stylesheet" href="app.css?v=7">
 <script src="vendor/gsap.min.js" defer></script>
 <script src="vendor/CustomEase.min.js" defer></script>
 </head>
@@ -104,6 +104,10 @@
     </symbol>
     <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="9"/><path d="M10 8.6 16 12l-6 3.4z"/>
+    </symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 8.5A5.5 5.5 0 0 1 9.5 3h5A5.5 5.5 0 0 1 20 8.5"/><path d="M17 5.5 20 8.5 17 11.5"/>
+      <path d="M20 15.5A5.5 5.5 0 0 1 14.5 21h-5A5.5 5.5 0 0 1 4 15.5"/><path d="M7 18.5 4 15.5 7 12.5"/>
     </symbol>
     <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 4v10.5M8 11l4 4 4-4M5 18.5h14"/>
@@ -218,8 +222,8 @@
         <button class="add-tile" id="btn-photo" data-rise>
           <span class="add-tile-glow" aria-hidden="true"></span>
           <svg aria-hidden="true"><use href="#i-camera"></use></svg>
-          <b>Prendre une photo</b>
-          <small>Appareil du téléphone</small>
+          <b>Photographier</b>
+          <small>En rafale, sans confirmer</small>
         </button>
 
         <button class="add-tile" id="btn-video" data-rise>
@@ -238,6 +242,10 @@
           </span>
         </button>
       </div>
+
+      <p class="native-fallback">
+        <button type="button" id="btn-photo-native">ou utiliser l’appareil photo du téléphone</button>
+      </p>
 
       <input type="file" id="input-photo"   accept="image/*" capture="environment" class="visually-hidden" tabindex="-1">
       <input type="file" id="input-video"   accept="video/*" capture="environment" class="visually-hidden" tabindex="-1">
@@ -438,6 +446,6 @@
   </div>
 </div>
 
-<script src="app.js?v=6" type="module"></script>
+<script src="app.js?v=7" type="module"></script>
 </body>
 </html>
