@@ -12,11 +12,12 @@ directory = "public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# Stockage des médias — bucket PRIVÉ (aucun accès public).
-[[r2_buckets]]
-binding = "MEDIA"
-bucket_name = "ouistitii-medias"
-preview_bucket_name = "ouistitii-medias-dev"
+# Pas de stockage objet Cloudflare : les souvenirs vont dans le Google Drive
+# des mariés. Un seau R2 exigerait une carte bancaire à l'activation, ce que ce
+# projet s'interdit.
+#
+# En développement, un seau local est ajouté à la volée par la commande `dev`
+# (option --r2 MEDIA), ce qui permet de tout éprouver sans compte Google.
 
 # Métadonnées (contributeurs, médias, statuts).
 [[d1_databases]]
