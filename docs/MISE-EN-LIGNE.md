@@ -50,50 +50,76 @@ Cette adresse ne servira à rien.
 ### 1.2 Activer l'accès au Drive
 
 1. Menu **☰** (en haut à gauche) → **API et services** → **Bibliothèque**
+   *(vérifiez que le projet `OUISTITII` est bien sélectionné en haut)*
 2. Dans la recherche, tapez `Google Drive API`
 3. Cliquez sur le résultat → bouton **Activer**
 
 ### 1.3 Décrire l'application
 
-Selon l'ancienneté de votre interface, cette section s'appelle **« Écran de
-consentement OAuth »** ou **« Google Auth Platform »**. C'est la même chose.
+Google a renommé cette partie en **« Google Auth Platform »**. Si votre colonne
+de gauche affiche *Présentation · Branding · Audience · Clients · Accès aux
+données*, c'est cette version-là que vous avez. Les correspondances :
+
+| Ancien nom (encore vu dans certains tutoriels) | Chez vous |
+|---|---|
+| Écran de consentement OAuth | **Branding** |
+| Utilisateurs test | **Audience** |
+| Identifiants → ID client OAuth | **Clients** |
+| Champs d'application (scopes) | **Accès aux données** |
 
 1. Menu **☰** → **API et services** → **Écran de consentement OAuth**
-2. Type d'utilisateur : **Externe** → **Créer**
-3. Remplissez seulement les champs obligatoires :
-   - Nom de l'application : `OUISTITII`
-   - Adresse e-mail d'assistance : votre adresse
-   - Coordonnées du développeur : votre adresse
-4. **Enregistrer et continuer**
+   *(ou directement **Google Auth Platform** si c'est ce que vous voyez)*
+2. Si l'on vous le demande : type d'utilisateur **Externe**
+3. Remplissez les champs obligatoires — nom de l'application `OUISTITII`,
+   votre adresse en e-mail d'assistance et en contact développeur
 
-**Écran « Niveaux d'accès » (scopes)** — c'est l'étape importante :
+### 1.4 Autoriser l'accès aux fichiers de l'application
 
-5. Cliquez **Ajouter ou supprimer des champs d'application**
-6. Dans le filtre, tapez `drive.file`
-7. Cochez la ligne **`.../auth/drive.file`**
-   *(sa description dit : voir et gérer uniquement les fichiers créés par cette
-   application — c'est exactement ce qu'on veut : elle ne verra jamais le reste
-   de votre Drive)*
-8. **Mettre à jour** → **Enregistrer et continuer**
+Colonne de gauche → **Accès aux données** (ou *Champs d'application*).
 
-**Écran « Utilisateurs test »** :
+1. Cliquez **Ajouter ou supprimer des niveaux d'accès**
+2. Un panneau s'ouvre sur la droite avec une longue liste. Dans le champ
+   **Filtrer**, tapez `drive.file`
+3. Cochez la ligne :
 
-9. **Ajouter des utilisateurs** → votre adresse Gmail → **Ajouter**
-10. **Enregistrer et continuer**
+   > ☐ **Google Drive API** · `.../auth/drive.file`
+   > « Consulter, modifier, créer et supprimer **uniquement les fichiers Google
+   > Drive spécifiques que vous utilisez avec cette application** »
 
-> L'application reste en mode « test ». C'est voulu : Google ne demande aucune
-> vérification, puisque le seul compte concerné est le vôtre.
+   C'est bien celle-là, même si la formulation de Google diffère d'un écran à
+   l'autre. Elle veut dire : l'application ne verra **que** ce qu'elle a
+   elle-même déposé.
 
-### 1.4 Créer les identifiants
+   ⚠️ **Ne cochez rien d'autre.** Surtout pas `drive.readonly`,
+   `drive.metadata` ou `drive` tout court : celles-là ouvriraient l'accès à
+   **tout** votre Drive.
 
-1. Menu **☰** → **API et services** → **Identifiants**
-2. **+ Créer des identifiants** → **ID client OAuth**
-3. Type d'application : **Application de bureau**
-4. Nom : `OUISTITII` → **Créer**
-5. Une fenêtre affiche **l'ID client** et le **code secret du client**.
-   Gardez-la ouverte, ou copiez les deux quelque part.
+4. En bas du panneau : **Mettre à jour**
+5. Sur la page derrière : **Enregistrer**
 
-### 1.5 Récupérer le jeton
+### 1.5 S'autoriser soi-même
+
+Colonne de gauche → **Audience** (anciennement *Utilisateurs test*).
+
+1. Descendez jusqu'à la section **Utilisateurs tests**
+2. **+ Add users** (ou *Ajouter des utilisateurs*)
+3. Saisissez **votre adresse Gmail** — celle dont vous voulez utiliser le Drive
+4. **Enregistrer**
+
+> L'application reste en mode « test » : Google ne demande aucune vérification,
+> puisque vous êtes le seul compte autorisé. C'est exactement ce qu'on veut.
+
+### 1.6 Créer les identifiants
+
+Colonne de gauche → **Clients** (anciennement *Identifiants*).
+
+1. **+ Créer un client** (ou *+ Créer des identifiants → ID client OAuth*)
+2. Type d'application : **Application de bureau**
+3. Nom : `OUISTITII` → **Créer**
+4. Une fenêtre affiche **l'ID client** et le **code secret**.
+   Copiez les deux — ils ne seront plus affichés en entier ensuite.
+
+### 1.7 Récupérer le jeton
 
 Dans le terminal, à la racine du projet :
 
