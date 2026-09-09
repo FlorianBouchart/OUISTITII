@@ -9,6 +9,8 @@
  *   • tout se coupe proprement si le téléphone demande moins d'animations.
  */
 
+import { TailTransition, detectQuality } from './tail-transition.js';
+
 const gsap = window.gsap;
 
 export const reducedMotion = () =>
@@ -17,22 +19,61 @@ export const reducedMotion = () =>
 export const finePointer = () => window.matchMedia('(pointer: fine)').matches;
 
 /* ═══════════════════════════════════════════════════════════════
-   TRANSITION — la queue de ouistiti balaie l'écran
+   TRANSITION — la queue du ouistiti balaie l'écran
    ═══════════════════════════════════════════════════════════════ */
 
-const VEIL_BULGE = 'M0 40 C 90 -34, 285 -34, 375 40 L375 120 L0 120 Z';
-const VEIL_FLAT  = 'M0 0  C 90 0,   285 0,   375 0  L375 120 L0 120 Z';
-
+let engine = null;
 let curtainBusy = false;
+let resizeTimer = null;
+
+/** Le moteur n'est construit qu'au premier passage, et une seule fois. */
+function getEngine() {
+  if (engine) return engine;
+  const canvas = document.querySelector('#tail-canvas');
+  if (!canvas || !canvas.getContext) return null;
+
+  engine = new TailTransition(canvas, { quality: detectQuality() });
+
+  // Rotation de l'écran ou clavier qui s'ouvre : on recalcule la trajectoire,
+  // jamais pendant une transition en cours.
+  const onResize = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (!curtainBusy) engine.resize(); }, 180);
+  };
+  window.addEventListener('resize', onResize, { passive: true });
+  window.addEventListener('orientationchange', onResize, { passive: true });
+  return engine;
+}
+
+/** Courbe d'ensemble : entrée vive, enroulement qui prend son temps, fuite nette. */
+function tailEase() {
+  if (window.CustomEase) {
+    return (
+      window.CustomEase.get?.('ouistitiTail') ||
+      window.CustomEase.create(
+        'ouistitiTail',
+        // Volontairement proche de la diagonale : les temps forts sont réglés
+        // dans la trajectoire elle-même, une courbe trop marquée les décalerait.
+        // Il ne reste ici qu'un élan au départ et une détente à l'arrivée.
+        'M0,0 C0.14,0.16 0.3,0.4 0.5,0.51 0.72,0.63 0.86,0.86 1,1'
+      )
+    );
+  }
+  return 'power1.inOut';
+}
 
 /**
- * Rideau de passage. Le voile navy monte du bas avec un bord bombé, la queue
- * s'y dessine en or, puis tout se retire vers le haut.
- * `swap` est appelé quand l'écran est couvert : c'est là qu'on change de vue.
+ * Rideau de passage.
+ *
+ * La queue entre hors champ, traverse l'écran, s'enroule jusqu'à tout recouvrir,
+ * puis se dévide et s'échappe. L'écran change pendant qu'elle couvre — `swap`
+ * est appelé à cet instant précis, et une seule fois.
  */
 export function curtain(swap, { word } = {}) {
   const veil = document.querySelector('#curtain');
-  if (reducedMotion() || !veil || !gsap) {
+  const tail = getEngine();
+
+  if (reducedMotion() || !veil || !gsap || !tail) {
     swap();
     return Promise.resolve();
   }
@@ -42,36 +83,31 @@ export function curtain(swap, { word } = {}) {
   }
   curtainBusy = true;
 
-  const sheetPath = veil.querySelector('.curtain-edge path');
-  const tail = veil.querySelector('.curtain-tail-line');
-  const rings = veil.querySelectorAll('.curtain-ring');
-  const face = veil.querySelector('.curtain-face');
   const label = veil.querySelector('.curtain-word');
-
-  const length = tail.getTotalLength();
-  gsap.set(tail, { strokeDasharray: length, strokeDashoffset: length });
-  gsap.set(rings, { opacity: 0, scale: 0.4, transformOrigin: 'center' });
-  gsap.set(face, { opacity: 0, y: 14, scale: 0.9 });
-  gsap.set(label, { opacity: 0, y: 10 });
   if (label) label.textContent = word || '';
-  gsap.set(sheetPath, { attr: { d: VEIL_BULGE } });
 
+  const stage = document.querySelector('#app');
+  const light = tail.quality === 'low';
+
+  tail.resize();
+  tail.reset();
   veil.hidden = false;
+
+  const state = { p: 0 };
+  const duration = window.innerHeight >= window.innerWidth ? 1.05 : 1.2;
 
   return new Promise((resolve) => {
     let settled = false;
     let swapped = false;
     let timeline = null;
+    let last = performance.now();
 
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(guard);
-      timeline?.kill();
-      gsap.set(veil, { clearProps: 'transform' });
-      veil.hidden = true;
-      curtainBusy = false;
-      resolve();
+    const render = () => {
+      const now = performance.now();
+      const delta = now - last;
+      last = now;
+      tail.advance(state.p, delta);
+      tail.draw(state.p);
     };
 
     const swapOnce = () => {
@@ -80,38 +116,91 @@ export function curtain(swap, { word } = {}) {
       swap();
     };
 
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      gsap.ticker.remove(render);
+      timeline?.kill();
+      tail.clear();
+      veil.hidden = true;
+      // On rend la main au navigateur : plus une seule couche à composer.
+      gsap.set(stage, { clearProps: 'transform,opacity,willChange' });
+      gsap.set(label, { clearProps: 'all' });
+      curtainBusy = false;
+      resolve();
+    };
+
     /*
-     * Filet de sécurité. GSAP avance au rythme des images écran : téléphone
-     * verrouillé ou onglet passé en arrière-plan, la timeline se fige et le
-     * rideau resterait tiré pour de bon. Passé le temps prévu, on tranche.
+     * Filet de sécurité. GSAP avance au rythme des images écran, qui s'arrêtent
+     * net quand l'onglet passe en arrière-plan ou que le téléphone se verrouille.
+     * Passé le temps prévu, on tranche : l'écran a de toute façon déjà changé.
      */
     const guard = setTimeout(() => {
       swapOnce();
       finish();
-    }, 3200);
+    }, duration * 1000 + 1400);
 
-    timeline = gsap
-      .timeline({
-        defaults: { ease: 'power3.inOut' },
-        onComplete: finish,
-      })
-      // 1. le voile monte, son bord s'aplatit
-      .fromTo(veil, { yPercent: 100 }, { yPercent: 0, duration: 0.52 }, 0)
-      .to(sheetPath, { attr: { d: VEIL_FLAT }, duration: 0.52 }, 0)
-      // 2. la queue se dessine, la frimousse apparaît
-      .to(tail, { strokeDashoffset: 0, duration: 0.5, ease: 'power2.out' }, 0.22)
-      .to(rings, { opacity: 0.7, scale: 1, duration: 0.22, stagger: 0.035 }, 0.36)
-      .to(face, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: 'back.out(2)' }, 0.34)
-      .to(label, { opacity: 1, y: 0, duration: 0.3 }, 0.44)
-      // 3. l'écran change derrière le voile
-      .add(swapOnce, 0.56)
-      // 4. tout se retire vers le haut
-      .to(sheetPath, { attr: { d: VEIL_BULGE }, duration: 0.5 }, 0.86)
-      .to(tail, { strokeDashoffset: -length * 0.35, duration: 0.42, ease: 'power2.in' }, 0.82)
-      .to(rings, { opacity: 0, scale: 0.5, duration: 0.2, stagger: 0.02 }, 0.82)
-      .to(face, { opacity: 0, scale: 0.8, duration: 0.26 }, 0.84)
-      .to(label, { opacity: 0, y: -8, duration: 0.24 }, 0.84)
-      .to(veil, { yPercent: -100, duration: 0.52 }, 0.9);
+    gsap.ticker.add(render);
+
+    timeline = gsap.timeline({ onComplete: finish });
+
+    // La queue elle-même.
+    timeline.to(state, { p: 1, duration, ease: tailEase() }, 0);
+
+    // La page qui part : elle recule d'abord d'un cheveu — l'anticipation — puis
+    // s'enfonce pendant que la queue passe devant.
+    timeline
+      .set(stage, { willChange: 'transform', transformPerspective: light ? 0 : 900 }, 0)
+      .to(stage, { scale: 1.012, duration: duration * 0.1, ease: 'power2.out' }, 0)
+      .to(
+        stage,
+        {
+          scale: light ? 0.965 : 0.93,
+          rotateX: light ? 0 : 5,
+          y: light ? 0 : -14,
+          opacity: 0.55,
+          duration: duration * 0.42,
+          ease: 'power2.in',
+        },
+        duration * 0.1
+      );
+
+    // Le mot de la marque, le temps que l'écran soit couvert.
+    if (label) {
+      timeline
+        .fromTo(
+          label,
+          { opacity: 0, y: 12, scale: 0.94 },
+          { opacity: 1, y: 0, scale: 1, duration: duration * 0.12, ease: 'back.out(2.4)' },
+          duration * 0.56
+        )
+        .to(label, { opacity: 0, y: -10, duration: duration * 0.1, ease: 'power2.in' }, duration * 0.76);
+    }
+
+    // Bascule d'écran : au cœur de la couverture, quand rien ne transparaît.
+    timeline.add(swapOnce, duration * 0.61);
+
+    // La page qui arrive : elle vient de plus loin et dépasse légèrement sa place.
+    timeline
+      .fromTo(
+        stage,
+        {
+          scale: light ? 1.03 : 1.07,
+          rotateX: light ? 0 : -6,
+          y: light ? 0 : 16,
+          opacity: 0.5,
+        },
+        {
+          scale: 1,
+          rotateX: 0,
+          y: 0,
+          opacity: 1,
+          duration: duration * 0.36,
+          ease: 'back.out(1.35)',
+        },
+        duration * 0.61
+      );
   });
 }
 

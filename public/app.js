@@ -113,9 +113,6 @@ function plantMascots() {
     host.appendChild(template.content.cloneNode(true));
     mascots.push(new Mascot(host.querySelector('.oui')));
   }
-  // La frimousse du rideau : même dessin, taille réduite.
-  const face = document.querySelector('.curtain-face');
-  if (face && !face.childElementCount) face.appendChild(template.content.cloneNode(true));
 }
 
 const cheer = () => mascots.forEach((m) => m.cheer());

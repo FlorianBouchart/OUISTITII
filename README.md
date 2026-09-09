@@ -85,7 +85,8 @@ worker/
   util.js       validation, empreintes de type, garde-fous anti-abus
 public/
   index.html    les cinq écrans
-  motion.js     rideau de passage, mascotte vivante, micro-interactions
+  motion.js     orchestration : rideau, mascotte vivante, micro-interactions
+  tail-transition.js  le moteur de la queue — physique, projection, rendu
   vendor/       GSAP, servi en local (la CSP interdit les scripts externes)
   app.js        parcours, file d'attente, album, rendu
   uploader.js   moteur d'envoi (parties, reprise, tentatives)
@@ -117,12 +118,11 @@ grands yeux, large sourire, et une queue annelée calculée en spirale. Elle n'e
 pas un décor — elle réagit. Elle cligne des yeux au repos, suit du regard ce que
 l'invité écrit, sursaute quand des photos arrivent, sourit franchement à l'envoi.
 
-**La queue est le rideau de passage.** À chaque changement d'écran, un voile navy
-monte du bas avec un bord bombé, la queue s'y dessine en or, la frimousse
-apparaît avec un mot — « Enchantés », « Ouistiti ! », « L'album » — puis tout se
-retire vers le haut. Aucun écran ne change d'un coup sec.
+**La queue est le rideau de passage** — et c'est le morceau de bravoure de
+l'application. Voir la section suivante.
 
-**Les autres gestes** : le mot OUISTITII s'écrit lettre par lettre ; un trait d'or
+**Les autres gestes restent volontairement discrets** — un seul moment
+spectaculaire vaut mieux que vingt effets moyens. Le mot OUISTITII s'écrit lettre par lettre ; un trait d'or
 se remplit sous les champs pendant la frappe et la signature se trace en dessous
 en Parfumerie Script ; les vignettes tombent en cascade, chacune posée un peu de
 travers comme un polaroïd ; un flash d'appareil photo éclate sur chaque souvenir
@@ -132,6 +132,55 @@ magnétiques.
 
 Le tout est piloté par **GSAP, servi en local** (`public/vendor/`) — la politique
 de sécurité de contenu interdit tout script externe.
+
+### La transition : la queue balaie l'écran
+
+Aucun écran ne change d'un coup sec. Entre deux vues, la queue du ouistiti
+traverse la page, l'écran bascule pendant qu'elle couvre, puis elle s'échappe.
+
+**Ce n'est pas un dessin qu'on déplace.** La queue est une chaîne de points
+reliés par des ressorts amortis (`public/tail-transition.js`). Seule la pointe
+est pilotée le long d'une trajectoire ; tout le reste suit avec du retard. De là
+viennent, sans être programmés un par un, l'inertie, le fouetté, le dépassement
+et le retour — la « personnalité » du mouvement.
+
+**Le déroulé**, en une seconde environ :
+
+| | |
+|---|---|
+| 0 → 150 ms | la page recule d'un cheveu, puis s'enfonce en perspective — l'anticipation |
+| 150 → 500 ms | la queue jaillit du bas, fouette en S, ressort par la gauche, revient |
+| 500 ms | une vague navy avance dans son sillage, bord ondulé, et couvre l'écran |
+| ~640 ms | l'écran change, à l'abri des regards |
+| 500 → 880 ms | **la queue s'inverse** : crème sur navy, anneaux dorés — elle reste le sujet |
+| 880 → 1050 ms | la vague sort par l'autre bord, la nouvelle page arrive avec un léger dépassement |
+
+**La trajectoire est calculée, pas dessinée.** Elle est reconstruite à chaque
+changement de format : en portrait la queue balaie de bas en haut, en paysage
+elle traverse latéralement, et la longueur, l'épaisseur, le rayon de boucle et
+l'amplitude de la vague se déduisent du viewport. Ce n'est pas une animation
+d'ordinateur qu'on rétrécit sur téléphone.
+
+**Le relief sans bibliothèque 3D.** Chaque point porte une profondeur, projetée
+autour du centre de l'écran : la queue plonge vers le spectateur au milieu de sa
+course, puis s'éloigne. Un dégradé le long du corps, un liseré clair au tiers de
+sa largeur et des anneaux dorés font le galbe. Deux échos translucides suggèrent
+la vitesse — sans le moindre filtre, qui coûterait une fortune sur téléphone.
+
+**Ce qu'elle coûte**, mesuré image par image sur six formats (petit et grand
+téléphone, portrait et paysage, ordinateur, appareil modeste) :
+
+| | |
+|---|---|
+| Travail par image | **0,08 à 0,4 ms**, pour un budget de 16,7 ms à 60 images/seconde |
+| Écran couvert au moment de la bascule | **100 %** sur tous les formats testés |
+| Allocations pendant l'animation | **aucune** — tous les tableaux sont typés et pré-alloués |
+| Accès au DOM pendant l'animation | **aucun** |
+| Après la transition | couches et `will-change` libérés, aucun abonné laissé au ticker |
+
+Sur un appareil modeste (détecté par le nombre de cœurs et la mémoire), la
+transition n'est pas remplacée : elle est allégée — chaîne plus courte, échos
+supprimés, moins de pixels, page qui recule sans perspective.
 
 ### Une règle qui gouverne toutes les animations
 
@@ -332,6 +381,9 @@ Testé de bout en bout sur le Worker local, en émulation iPhone :
 - **animations sans images écran** : rideau, apparitions, retraits et compteurs
   aboutissent quand même — vérifié dans un navigateur où `requestAnimationFrame`
   ne tourne pas du tout ;
+- **la transition, image par image** sur six formats : couverture totale au
+  moment de la bascule, coût par image mesuré, aucune fuite après six passages,
+  navigation intacte quand le canvas est retiré ;
 - accessibilité : contrastes tous ≥ 4,5:1, cibles tactiles ≥ 44 px ;
 - `npm run verify` : signature SigV4 conforme au vecteur de test officiel d'AWS et à une
   seconde implémentation indépendante (clés accentuées et `uploadId` exotiques compris).
