@@ -398,12 +398,7 @@ Une page Google s'ouvre, on autorise, le jeton s'affiche dans le terminal.
 npm run login                 # compte Cloudflare (Workers et D1 : gratuits)
 npm run db:create             # reporter l'`database_id` dans wrangler.toml
 
-npm run secret:token          # une longue chaîne aléatoire
-npm run secret:admin          # le mot de passe des mariés
-npm run secret:g-id
-npm run secret:g-key
-npm run secret:g-token
-
+npm run setup                 # enregistre les cinq secrets, en guidant
 npm run deploy
 ```
 

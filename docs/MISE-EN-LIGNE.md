@@ -209,31 +209,59 @@ place de `REMPLACER_PAR_L_ID_D1`.
 
 ### 2.3 Enregistrer les secrets
 
-Cinq commandes. Chacune demande la valeur, que vous collez puis validez.
-Rien ne s'affiche pendant la frappe : c'est normal.
+Une seule commande vous guide de bout en bout :
 
 ```bash
-npm run secret:token
+npm run setup
 ```
-→ n'importe quelle longue suite de caractères au hasard (30 signes ou plus)
+
+Elle explique chaque valeur, la demande, et l'enregistre chez Cloudflare.
+
+**Ce qu'elle attend, et ce qu'il faut retenir :**
+
+| | Ce qu'on y met | À retenir ? |
+|---|---|---|
+| Clé de signature | rien : elle est tirée au hasard | **non** |
+| Mot de passe de l'espace privé | ce que **vous** choisissez | **oui — le seul** |
+| Identifiant client Google | copié depuis *Google Cloud → Clients* | non |
+| Code secret Google | copié depuis le même écran | non |
+| Jeton de renouvellement | affiché par `npm run google:token` | non |
+
+> Rien ne s'affiche pendant que vous tapez ou collez un mot de passe : c'est
+> une saisie masquée, elle enregistre bien ce que vous entrez.
+
+**Retenez seulement le mot de passe de l'espace privé.** C'est celui que Thomy
+et vous taperez sur `/admin.html` pour voir tous les souvenirs. Les quatre
+autres, l'application s'en souvient à votre place — et si vous les perdez :
+
+- *clé de signature* : sans conséquence, on en remet une autre
+- *identifiant et code secret Google* : dans *Google Cloud → Clients* (le code
+  secret n'étant plus affiché en entier, il faudrait recréer le client)
+- *jeton* : relancer `npm run google:token`
+
+Pour changer le mot de passe plus tard :
 
 ```bash
 npm run secret:admin
 ```
-→ le mot de passe de votre espace privé, celui que Thomy et vous utiliserez
 
-```bash
-npm run secret:g-id
-npm run secret:g-key
-npm run secret:g-token
-```
-→ les trois valeurs de l'étape 1 : identifiant, code secret, puis jeton
-
-Pour vérifier que les cinq sont bien enregistrés :
+Pour vérifier que les cinq sont en place :
 
 ```bash
 npm run secrets:list
 ```
+
+<details>
+<summary>Si vous préférez les enregistrer un par un</summary>
+
+```bash
+npm run secret:token     # clé de signature (une longue suite au hasard)
+npm run secret:admin     # mot de passe de l'espace privé
+npm run secret:g-id      # identifiant client Google
+npm run secret:g-key     # code secret Google
+npm run secret:g-token   # jeton de renouvellement
+```
+</details>
 
 ### 2.4 Publier
 

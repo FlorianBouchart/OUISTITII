@@ -20,6 +20,7 @@
     "secret:g-token": "./node_modules/.bin/wrangler secret put GOOGLE_REFRESH_TOKEN",
     "secret:token": "./node_modules/.bin/wrangler secret put TOKEN_SECRET",
     "secrets:list": "./node_modules/.bin/wrangler secret list",
+    "setup": "node scripts/setup.mjs",
     "tail": "./node_modules/.bin/wrangler tail",
     "verify": "node scripts/verify-signature.mjs",
     "verify:api": "python3 scripts/verify-chain.py",
