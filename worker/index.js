@@ -5,7 +5,7 @@
  */
 
 import { json, AppError, purgeRateLimits } from './util.js';
-import { ensureSchema } from './schema.js';
+import { ensureSchema, invalidateSchema } from './schema.js';
 import {
   openSession, checkFingerprints, initUpload, morePartUrls,
   completeUpload, failUpload, relayUpload,
@@ -36,6 +36,11 @@ export default {
         return withCors(json({ error: error.code, message: error.message }, error.status), request);
       }
       console.error('[ouistitii]', error?.stack || error);
+      // Une panne de base peut venir d'un schéma devenu faux : la prochaine
+      // requête le revérifiera plutôt que de se fier à un état périmé.
+      if (/D1|database|no such table|no column/i.test(String(error?.message || ''))) {
+        invalidateSchema();
+      }
       return withCors(
         json(
           {

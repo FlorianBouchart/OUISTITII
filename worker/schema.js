@@ -67,24 +67,64 @@ export const SCHEMA = [
 ];
 
 /**
- * Vérifie la base une fois par instance du Worker, et la crée si elle est vide.
- * Le coût en régime normal est d'une requête triviale au premier appel.
+ * Colonnes ajoutées après coup. Une base créée par une version antérieure a
+ * bien ses tables, mais pas ces colonnes-là : le contrôle d'existence des
+ * tables ne suffirait donc pas, et chaque écriture échouerait.
  */
+const MEDIA_COLUMNS = {
+  thumb_key: 'TEXT',
+  width: 'INTEGER',
+  height: 'INTEGER',
+  duration: 'REAL',
+  stored_size: 'INTEGER',
+};
+
 let ready = false;
 
+/**
+ * Met la base en état : crée les tables absentes, ajoute les colonnes qui
+ * manquent, et se rejoue si jamais la base venait à disparaître sous les pieds
+ * du Worker (ce qui arrive en développement quand on efface l'état local).
+ *
+ * Coût en régime normal : une requête triviale au premier appel de l'instance.
+ */
 export async function ensureSchema(env) {
   if (ready) return;
+
+  let tablesExist = false;
   try {
     await env.DB.prepare('SELECT id FROM contributors LIMIT 1').first();
-    ready = true;
-    return;
+    tablesExist = true;
   } catch {
-    // Les tables manquent : c'est le premier démarrage.
+    tablesExist = false;
   }
 
-  for (const statement of SCHEMA) {
-    await env.DB.prepare(statement).run();
+  if (!tablesExist) {
+    for (const statement of SCHEMA) await env.DB.prepare(statement).run();
+    ready = true;
+    console.log('[ouistitii] base créée');
+    return;
   }
+
+  // Les tables sont là : reste à vérifier qu'elles sont à jour.
+  const { results } = await env.DB.prepare('PRAGMA table_info(media)').all();
+  const present = new Set(results.map((c) => c.name));
+  const missing = Object.entries(MEDIA_COLUMNS).filter(([name]) => !present.has(name));
+
+  for (const [name, type] of missing) {
+    await env.DB.prepare(`ALTER TABLE media ADD COLUMN ${name} ${type}`).run();
+  }
+  if (missing.length) {
+    console.log(`[ouistitii] base mise à jour : ${missing.map(([n]) => n).join(', ')}`);
+  }
+
   ready = true;
-  console.log('[ouistitii] base créée');
+}
+
+/**
+ * À appeler quand une requête échoue de façon inattendue : la prochaine
+ * requête revérifiera la base au lieu de se fier à un état devenu faux.
+ */
+export function invalidateSchema() {
+  ready = false;
 }

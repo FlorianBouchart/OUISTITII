@@ -14,7 +14,8 @@
     "db:create": "wrangler d1 create ouistitii",
     "tail": "wrangler tail",
     "verify": "node scripts/verify-signature.mjs",
-    "db:dump": "node -e \"const fs=require('fs');import('./worker/schema.js').then(m=>{fs.writeFileSync('schema.sql',m.SCHEMA.map(s=>s+';').join('\\n\\n')+'\\n');console.log('schema.sql régénéré')})\""
+    "db:dump": "node -e \"const fs=require('fs');import('./worker/schema.js').then(m=>{fs.writeFileSync('schema.sql',m.SCHEMA.map(s=>s+';').join('\\n\\n')+'\\n');console.log('schema.sql régénéré')})\"",
+    "verify:api": "python3 scripts/verify-chain.py"
   },
   "devDependencies": {
     "wrangler": "^4.130.0"
