@@ -3,6 +3,9 @@
 L'application photo et vidéo du mariage de **Thomy & Florian** — 12 décembre 2026,
 Domaine les Hauts de Vertigneul.
 
+**En ligne : https://ouistitii.florian-bouchart.workers.dev**
+L'espace des mariés se trouve à la même adresse, suivie de `/admin.html`.
+
 Un invité ouvre un lien, donne son prénom et son nom, prend ou choisit ses photos,
 vérifie, envoie. Rien d'autre. Les fichiers atterrissent dans un stockage privé qui
 appartient aux mariés.
