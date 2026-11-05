@@ -186,7 +186,7 @@ img { display: block; max-width: 100%; }
   -webkit-backdrop-filter: blur(20px) saturate(170%);
   border-bottom: 1px solid var(--gold-border);
 }
-/* Le retour vers le menu du jour J (site du mariage) : toujours en haut à gauche,
+/* Le retour vers le page du jour J (site du mariage) : toujours en haut à gauche,
    un mot clair plutôt qu'une icône, une vraie zone à toucher. */
 .topbar-home, .welcome-home {
   display: inline-flex; align-items: center; gap: .4rem;
