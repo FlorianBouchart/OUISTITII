@@ -140,7 +140,7 @@ img { display: block; max-width: 100%; }
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: url('assets/toile.jpg');
+  background-image: url('assets/toile-tf.jpg');
   background-size: 380px 380px;
   background-repeat: repeat;
   opacity: .1;
@@ -185,6 +185,25 @@ img { display: block; max-width: 100%; }
   backdrop-filter: blur(20px) saturate(170%);
   -webkit-backdrop-filter: blur(20px) saturate(170%);
   border-bottom: 1px solid var(--gold-border);
+}
+/* Le retour vers le menu du jour J (site du mariage) : toujours en haut à gauche,
+   un mot clair plutôt qu'une icône, une vraie zone à toucher. */
+.topbar-home, .welcome-home {
+  display: inline-flex; align-items: center; gap: .4rem;
+  min-height: 44px; padding: 0 .9rem 0 .7rem;
+  font-family: var(--font-body); font-weight: 500; font-size: .86rem; letter-spacing: .01em;
+  color: var(--navy); background: var(--cream);
+  border: 1px solid var(--gold-border2);
+  text-decoration: none; white-space: nowrap; flex-shrink: 0;
+}
+.topbar-home span, .welcome-home span { font-size: 1.35rem; line-height: 1; color: var(--gold-text, #8A6A21); }
+.topbar-home:focus-visible, .welcome-home:focus-visible { outline: 3px solid var(--navy); outline-offset: 3px; }
+/* à l'accueil : posé au-dessus du carton d'invitation, jamais dessus */
+.welcome-home {
+  position: relative; z-index: 5;
+  align-self: center;
+  margin-bottom: .9rem;
+  box-shadow: 0 0 0 4px rgba(250,245,239,.85);
 }
 .topbar-mark { display: flex; align-items: center; gap: .6rem; min-width: 0; }
 .topbar-mark img { width: 34px; height: 34px; flex-shrink: 0; }
@@ -321,6 +340,7 @@ img { display: block; max-width: 100%; }
 
 /* ═══ ÉCRAN D'ACCUEIL ═══════════════════════════════════════════ */
 #screen-welcome {
+  flex-direction: column;
   background: var(--toile-tint);
   justify-content: center;
   align-items: center;
