@@ -887,6 +887,84 @@ img { display: block; max-width: 100%; }
 .modal-actions { display: grid; gap: .6rem; }
 @media (min-width: 420px) { .modal-actions { grid-template-columns: 1fr 1fr; } }
 
+/* ═══ L'URNE : CARTE QUI PASSE ══════════════════════════════════
+   Posée en bas, sans voile : rien n'est bloqué derrière. Sous la
+   visionneuse (500) et la confirmation (700), au-dessus du reste. */
+.nudge {
+  position: fixed;
+  left: 50%;
+  bottom: calc(.75rem + var(--safe-b));
+  z-index: 450;
+  width: min(440px, calc(100% - 1.5rem));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: .9rem;
+  align-items: start;
+  padding: 1.15rem 1.1rem 1rem 1.05rem;
+  background: var(--cream);
+  border-radius: var(--r-lg);
+  box-shadow: 0 6px 18px rgba(31,47,68,.12), 0 22px 54px rgba(31,47,68,.2);
+  transform: translateX(-50%);
+  animation: nudgeIn .6s var(--ease-out) both;
+}
+.nudge[hidden] { display: none; }
+.nudge.is-leaving { animation: nudgeOut .34s ease-in both; }
+.nudge::before {
+  content: ''; position: absolute; inset: 6px; border-radius: calc(var(--r-lg) - 6px);
+  border: 1px solid var(--gold-border2); pointer-events: none;
+}
+@keyframes nudgeIn  { from { opacity: 0; transform: translate(-50%, 115%); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes nudgeOut { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, 115%); } }
+@media (prefers-reduced-motion: reduce) {
+  .nudge, .nudge.is-leaving { animation-name: fadeIn; }
+  .nudge.is-leaving { animation-direction: reverse; }
+}
+.nudge-ico {
+  display: grid; place-items: center;
+  width: 46px; height: 46px; margin-top: .1rem;
+  border-radius: 50%; background: var(--navy); color: var(--cream);
+}
+.nudge-ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.nudge-body { min-width: 0; padding-right: 1.6rem; }
+.nudge-eyebrow {
+  display: block;
+  font-family: var(--font-sub); font-size: .66rem; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--gold-text);
+}
+.nudge-title {
+  font-family: var(--font-title); font-size: 1.3rem; line-height: 1.18; color: var(--navy);
+  margin-top: .3rem;
+}
+.nudge-text { font-size: .86rem; line-height: 1.5; color: var(--text-mid); margin-top: .4rem; }
+.nudge-actions { display: flex; align-items: center; gap: .4rem; margin-top: .85rem; margin-left: -.1rem; flex-wrap: wrap; }
+.nudge-go {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 46px; padding: 0 1.5rem;
+  border-radius: var(--r-pill); background: var(--navy); color: var(--cream);
+  font-family: var(--font-body); font-size: .74rem; letter-spacing: .1em; text-transform: uppercase;
+  text-decoration: none;
+  transition: background var(--dur-mid) ease, transform var(--dur-fast) var(--ease-out);
+}
+.nudge-go:hover { background: var(--ocean2); }
+.nudge-go:active { transform: scale(.985); }
+.nudge-later {
+  min-height: 46px; padding: 0 1rem;
+  font-family: var(--font-body); font-size: .8rem; color: var(--text-mid);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--gold-border2);
+}
+.nudge-close {
+  position: absolute; top: .45rem; right: .45rem;
+  display: grid; place-items: center; width: 44px; height: 44px;
+  color: var(--text-light); border-radius: 50%;
+}
+.nudge-close svg { width: 18px; height: 18px; }
+/* très petit écran : l'icône s'efface, le texte prend toute la largeur */
+@media (max-width: 359px) {
+  .nudge { grid-template-columns: 1fr; padding-left: 1.2rem; }
+  .nudge-ico { display: none; }
+}
+.nudge-go:focus-visible, .nudge-later:focus-visible, .nudge-close:focus-visible { outline: 3px solid var(--navy); outline-offset: 3px; }
+
 /* ═══ CHARGEMENT ════════════════════════════════════════════════ */
 .spin { animation: spin 1s linear infinite; transform-origin: center; }
 @keyframes spin { to { transform: rotate(360deg); } }

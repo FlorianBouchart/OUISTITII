@@ -496,6 +496,7 @@ function renderQueue({ animateFrom = null } = {}) {
   const count = state.items.length;
   el.queueBlock.hidden = count === 0;
   el.dock.hidden = count === 0;
+  if (count && !nudge.hidden) hideNudge();   // la carte ne cache jamais le bouton d’envoi
   el.addHint.hidden = count > 0;
 
   const fragment = document.createDocumentFragment();
@@ -964,6 +965,7 @@ function buildShot(item) {
 
 function setPicking(on) {
   state.picking = on;
+  if (on && !nudge.hidden) hideNudge();
   if (!on) state.picked.clear();
   el.mosaic.classList.toggle('picking', on);
   $('#btn-pick').classList.toggle('is-on', on);
@@ -1259,6 +1261,85 @@ function setBusy(busy, message) {
   if (message) el.dockStatus.textContent = message;
   document.body.style.cursor = busy ? 'progress' : '';
 }
+
+/* ─── L'urne : une carte qui passe ─────────────────────────────── */
+/* Elle monte du bas à un moment tiré au hasard, seulement quand l'invité
+   n'est occupé à rien (ni appareil photo, ni envoi, ni photo en grand).
+   Deux passages par jour au plus ; plus jamais après « Participer ».
+   Ignorée, elle repart seule au bout de 30 s. Aperçu immédiat : ?urne=1 */
+
+const nudge = $('#nudge');
+const NUDGE_KEY = 'oui_urne';
+const NUDGE_PER_DAY = 2;
+let nudgeTimer = null;
+let nudgeHideTimer = null;
+
+function nudgeMemory() {
+  try { return JSON.parse(localStorage.getItem(NUDGE_KEY)) || {}; } catch { return {}; }
+}
+function nudgeRemember(patch) {
+  try { localStorage.setItem(NUDGE_KEY, JSON.stringify({ ...nudgeMemory(), ...patch })); } catch { /* navigation privée */ }
+}
+const nudgeToday = () => new Date().toLocaleDateString('fr-CA');
+const secondsBetween = (min, max) => (min + Math.random() * (max - min)) * 1000;
+
+function nudgeAllowed() {
+  const memory = nudgeMemory();
+  if (memory.done) return false;
+  return !(memory.day === nudgeToday() && (memory.n || 0) >= NUDGE_PER_DAY);
+}
+
+function nudgeFreeMoment() {
+  const focused = document.activeElement?.tagName;
+  return Boolean(state.guest)
+    && ['add', 'gallery', 'done'].includes(state.screen)
+    && document.visibilityState === 'visible'
+    && !viewfinder && viewer.hidden && modal.hidden
+    && !state.picking && !state.sending && el.dock.hidden
+    && focused !== 'INPUT' && focused !== 'TEXTAREA';
+}
+
+function scheduleNudge(min, max) {
+  clearTimeout(nudgeTimer);
+  if (nudgeAllowed()) nudgeTimer = setTimeout(tryNudge, secondsBetween(min, max));
+}
+
+function tryNudge() {
+  if (!nudgeAllowed()) return;
+  if (!state.guest) { scheduleNudge(60, 180); return; }        // pas encore entré : on lui laisse le temps d'arriver
+  if (!nudgeFreeMoment()) { scheduleNudge(20, 45); return; }   // occupé : on repasse un peu plus tard
+  const memory = nudgeMemory();
+  nudgeRemember({ day: nudgeToday(), n: (memory.day === nudgeToday() ? memory.n || 0 : 0) + 1 });
+  showNudge();
+}
+
+function showNudge() {
+  nudge.classList.remove('is-leaving');
+  nudge.hidden = false;
+  clearTimeout(nudgeHideTimer);
+  nudgeHideTimer = setTimeout(hideNudge, 30000);
+}
+
+/** Range la carte ; elle pourra repasser plus tard (20 à 45 min). */
+function hideNudge() {
+  clearTimeout(nudgeHideTimer);
+  if (!nudge.hidden && !nudge.classList.contains('is-leaving')) {
+    nudge.classList.add('is-leaving');
+    setTimeout(() => { nudge.hidden = true; nudge.classList.remove('is-leaving'); }, 340);
+  }
+  scheduleNudge(20 * 60, 45 * 60);
+}
+
+$('#nudge-later').addEventListener('click', hideNudge);
+$('#nudge-close').addEventListener('click', hideNudge);
+$('#nudge-go').addEventListener('click', () => {
+  nudgeRemember({ done: true });
+  clearTimeout(nudgeHideTimer);
+  clearTimeout(nudgeTimer);
+});
+
+if (new URLSearchParams(location.search).has('urne')) setTimeout(showNudge, 1500);
+else scheduleNudge(50, 240);   // première fois : entre 50 s et 4 min après l'arrivée
 
 /* ─── Démarrage ────────────────────────────────────────────────── */
 
