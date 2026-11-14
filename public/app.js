@@ -16,7 +16,7 @@ import {
 import {
   canShareFiles, prepareFiles, shareFiles, downloadFile, totalBytes, BATCH,
 } from './export.js';
-import { Viewfinder, cameraAvailable } from './camera.js';
+import { Viewfinder, cameraAvailable } from './camera.js?v=2';
 import {
   curtain, riseIn, spellOut, Mascot, flash, dropIn, flyOut, popSay,
   magnetize, countTo, drawSeal, reducedMotion,

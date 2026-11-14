@@ -78,13 +78,17 @@ export class Viewfinder {
 
   /* ─── Flux ─────────────────────────────────────────────────── */
 
+  /**
+   * Ouvre la bonne caméra. Avec une simple « préférence » pour l'objectif
+   * arrière, certains téléphones donnaient la caméra selfie : l'image était
+   * alors inversée comme dans un miroir. On exige donc l'objectif voulu, et,
+   * si le téléphone ne comprend pas la demande, on le cherche par son nom.
+   */
   async start() {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: this.facing }, ...IDEAL },
-        audio: false,
-      });
+      this.stream = await openCamera(this.facing);
       this.video.srcObject = this.stream;
+      this.applyMirror();
       await this.video.play();
       document.body.classList.add('is-shooting');
       return true;
@@ -93,6 +97,18 @@ export class Viewfinder {
       this.onError?.(describe(error));
       return false;
     }
+  }
+
+  /**
+   * Objectif arrière : l'image telle quelle, comme l'appareil photo du téléphone.
+   * Caméra selfie : affichée en miroir (on s'y reconnaît), et la photo est
+   * enregistrée exactement comme on l'a vue à l'écran.
+   */
+  applyMirror() {
+    const track = this.stream?.getVideoTracks()[0];
+    const facing = track?.getSettings?.().facingMode || this.facing;
+    this.mirror = facing === 'user';
+    this.video.style.transform = this.mirror ? 'scaleX(-1)' : 'none';
   }
 
   async flip() {
@@ -116,7 +132,9 @@ export class Viewfinder {
     const canvas = document.createElement('canvas');
     canvas.width = this.video.videoWidth;
     canvas.height = this.video.videoHeight;
-    canvas.getContext('2d').drawImage(this.video, 0, 0);
+    const ctx = canvas.getContext('2d');
+    if (this.mirror) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(this.video, 0, 0);
 
     this.blink();
     navigator.vibrate?.(8);
@@ -180,6 +198,36 @@ export class Viewfinder {
 }
 
 /* ─── Outils ───────────────────────────────────────────────────── */
+
+const looksBack = (label) => /back|rear|arri[eè]re|environment|world/i.test(label);
+const looksFront = (label) => /front|avant|user|face|selfie/i.test(label);
+
+/** Le flux de la caméra demandée, et pas d'une autre. */
+async function openCamera(facing) {
+  const md = navigator.mediaDevices;
+  let stream;
+  try {
+    stream = await md.getUserMedia({ video: { facingMode: { exact: facing }, ...IDEAL }, audio: false });
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') throw error;
+    stream = await md.getUserMedia({ video: { facingMode: { ideal: facing }, ...IDEAL }, audio: false });
+  }
+  // Vérification : le téléphone a-t-il vraiment donné cet objectif ?
+  const got = stream.getVideoTracks()[0]?.getSettings?.().facingMode;
+  if (got && got === facing) return stream;
+  const label = stream.getVideoTracks()[0]?.label || '';
+  const wanted = facing === 'environment' ? looksBack : looksFront;
+  if (!got && wanted(label)) return stream;
+  try {
+    const cams = (await md.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    const pick = cams.find((d) => wanted(d.label));
+    if (pick && pick.label !== label) {
+      stream.getTracks().forEach((t) => t.stop());
+      return await md.getUserMedia({ video: { deviceId: { exact: pick.deviceId }, ...IDEAL }, audio: false });
+    }
+  } catch { /* on garde le flux obtenu */ }
+  return stream;
+}
 
 const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T-]/g, '');
 
