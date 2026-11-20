@@ -8,15 +8,17 @@
  *   npm run google:token
  *
  * Le script demande les identifiants, ouvre une page d'autorisation, attend le
- * retour de Google, puis affiche le jeton à recopier dans
- * `wrangler secret put GOOGLE_REFRESH_TOKEN`.
+ * retour de Google, puis enregistre lui-même les trois secrets dans le Worker
+ * en ligne et vérifie que Google accepte bien le dépôt. Rien à recopier.
  *
  * Rien n'est écrit sur le disque : ni les identifiants, ni le jeton.
  */
 
 import http from 'node:http';
 import readline from 'node:readline';
-import { exec } from 'node:child_process';
+import { exec, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 /**
  * Les identifiants sont demandés à la saisie plutôt que passés en arguments :
@@ -76,6 +78,38 @@ const authUrl =
     prompt: 'consent',
   });
 
+const ICI = path.dirname(fileURLToPath(import.meta.url));
+const WRANGLER = path.join(ICI, '..', 'node_modules', '.bin', 'wrangler');
+const SITE = 'https://ouistitii.by-tf.workers.dev';
+
+/** Écrit un secret dans le Worker en ligne, sans qu'il passe par l'écran ni l'historique. */
+function putSecret(nom, valeur) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(WRANGLER, ['secret', 'put', nom], { cwd: path.join(ICI, '..'), stdio: ['pipe', 'ignore', 'pipe'] });
+    let err = '';
+    p.stderr.on('data', (d) => { err += d; });
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${nom} : ${err.trim().slice(-300)}`))));
+    p.stdin.end(valeur + '\n');
+  });
+}
+
+/** Demande au Worker en ligne de tester l'autorisation Google (le nouveau secret met quelques secondes à se propager). */
+async function verifier() {
+  for (let essai = 1; essai <= 6; essai++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    try {
+      const r = await fetch(`${SITE}/api/health?drive=1`, { headers: { 'user-agent': 'Mozilla/5.0 ouistitii-setup' } });
+      const d = await r.json();
+      if (d.drive === 'ok') {
+        console.log('\n✅ C\'est réparé : Google accepte le dépôt, les photos peuvent repartir.\n');
+        return;
+      }
+    } catch {}
+  }
+  console.log('\n⚠️  Le secret est enregistré, mais Google refuse encore. Vérifiez que l\'application');
+  console.log('   est bien « En production » dans Google Cloud (Audience), puis relancez la commande.\n');
+}
+
 const server = http.createServer(async (req, res) => {
   const code = new URL(req.url, REDIRECT).searchParams.get('code');
   if (!code) {
@@ -108,10 +142,18 @@ const server = http.createServer(async (req, res) => {
     '<p style="font-family:system-ui">Vous pouvez fermer cet onglet et revenir au terminal.</p>'
   );
 
-  console.log('\n═══ Jeton de renouvellement ═══\n');
-  console.log(data.refresh_token);
-  console.log('\nÀ enregistrer ainsi :\n');
-  console.log('  npx wrangler secret put GOOGLE_REFRESH_TOKEN\n');
+  server.close();
+  console.log('\nAutorisation reçue. Enregistrement dans l\'application en ligne…');
+  try {
+    await putSecret('GOOGLE_CLIENT_ID', clientId);
+    await putSecret('GOOGLE_CLIENT_SECRET', clientSecret);
+    await putSecret('GOOGLE_REFRESH_TOKEN', data.refresh_token);
+  } catch (err) {
+    console.error('\nL\'enregistrement a échoué :', err.message);
+    console.error('Lancez « npm run login » puis recommencez « npm run google:token ».');
+    process.exit(1);
+  }
+  await verifier();
   server.close();
 });
 

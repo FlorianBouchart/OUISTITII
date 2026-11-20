@@ -6,6 +6,7 @@
 
 import { json, AppError, purgeRateLimits } from './util.js';
 import { ensureSchema, invalidateSchema } from './schema.js';
+import { driveConfig, accessToken } from './drive.js';
 import {
   openSession, checkFingerprints, initUpload, morePartUrls,
   completeUpload, failUpload, relayUpload,
@@ -109,6 +110,20 @@ async function route(request, env, url, ctx) {
   }
 
   if (path === '/api/health') {
+    // ?drive=1 vérifie pour de vrai que Google accepte encore l'autorisation
+    // de dépôt : sans elle, plus aucun souvenir ne part, alors que le site
+    // continue de s'afficher normalement.
+    if (url.searchParams.get('drive') === '1') {
+      const cfg = driveConfig(env);
+      if (!cfg) return json({ ok: true, drive: 'absent' });
+      try {
+        await accessToken(cfg);
+        return json({ ok: true, drive: 'ok' });
+      } catch (err) {
+        console.error('[ouistitii] drive health', String(err && err.message || err).slice(0, 200));
+        return json({ ok: false, drive: 'refused' }, 503);
+      }
+    }
     return json({ ok: true, service: 'ouistitii', date: env.EVENT_DATE });
   }
 

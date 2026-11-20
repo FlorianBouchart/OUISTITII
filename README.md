@@ -383,8 +383,11 @@ L'espace des mariés : `http://localhost:5185/admin.html`
 3. *Écran de consentement OAuth* → type **Externe** → renseigner le nom de
    l'application et un e-mail de contact → ajouter la portée
    `.../auth/drive.file` → s'ajouter comme **utilisateur de test**.
-   L'application reste en mode test : aucune vérification Google n'est requise,
-   puisque le seul compte concerné est celui des mariés.
+   Puis **Audience → Publier l'application** (statut « En production »).
+   ⚠️ En mode test, Google fait expirer l'autorisation au bout de 7 jours :
+   plus aucune photo ne part (erreur `invalid_grant`, vécue le 20/11/2026).
+   La portée `drive.file` n'est pas sensible : aucune vérification Google
+   n'est demandée pour passer en production.
 4. *Identifiants → Créer → ID client OAuth → Application de bureau*.
    Noter l'identifiant et le secret.
 5. Obtenir le jeton de renouvellement :
@@ -393,7 +396,10 @@ L'espace des mariés : `http://localhost:5185/admin.html`
 npm run google:token
 ```
 
-Une page Google s'ouvre, on autorise, le jeton s'affiche dans le terminal.
+Une page Google s'ouvre, on autorise ; le script enregistre lui-même les trois
+secrets dans le Worker en ligne puis vérifie que Google accepte le dépôt.
+Contrôle à tout moment : `https://ouistitii.by-tf.workers.dev/api/health?drive=1`
+doit répondre `"drive":"ok"`.
 
 **Étape 2 — mettre en ligne**
 
