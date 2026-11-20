@@ -18,6 +18,7 @@ import {
   relayPut, relayPart, headObject, getObject, deleteObject, partSizeOf, multipartThreshold,
   driveChunk, putThumbObject,
 } from './storage.js';
+import { driveConfig, driveQuota } from './drive.js';
 
 const maxFileBytes = (env) => Number(env.MAX_FILE_MB || 600) * 1024 * 1024;
 
@@ -42,12 +43,44 @@ async function usedBytes(env) {
  * facture ne peut apparaître. L'album reste consultable et téléchargeable —
  * seuls les nouveaux envois sont refusés.
  */
+/**
+ * Place réellement libre sur le Drive des mariés. Leurs 15 Go sont partagés
+ * avec Gmail et Google Photos : le plafond de l'album seul ne suffit pas, le
+ * Drive peut être plein bien avant. On interroge Google au plus une fois par
+ * minute, et on retranche ce qui est en cours d'envoi (pas encore compté par
+ * Google). Marge de 300 Mo pour ne jamais buter sur un refus brutal de Google.
+ */
+let quotaCache = { at: 0, value: null };
+const DRIVE_MARGIN = 300 * 1024 * 1024;
+
+async function driveRoom(env) {
+  const cfg = driveConfig(env);
+  if (!cfg) return null;
+  if (Date.now() - quotaCache.at > 60_000) {
+    try {
+      quotaCache = { at: Date.now(), value: await driveQuota(cfg) };
+    } catch {
+      quotaCache = { at: Date.now(), value: null };
+    }
+  }
+  const q = quotaCache.value;
+  if (!q || q.free == null) return null;
+  const row = await env.DB.prepare(
+    `SELECT COALESCE(SUM(size), 0) AS total FROM media WHERE status IN ('uploading','pending')`
+  ).first();
+  return q.free - Number(row?.total || 0) - DRIVE_MARGIN;
+}
+
 async function assertRoom(env, incoming) {
   const limit = storageLimit(env);
-  if (!limit) return;
+  const room = await driveRoom(env);
+  const driveOk = room == null || incoming <= room;
 
-  const used = await usedBytes(env);
-  if (used + incoming <= limit) return;
+  if (driveOk) {
+    if (!limit) return;
+    const used = await usedBytes(env);
+    if (used + incoming <= limit) return;
+  }
 
   throw bad(
     'storage_full',
@@ -60,8 +93,15 @@ async function assertRoom(env, incoming) {
 
 /** État du stockage, pour l'afficher aux mariés et prévenir avant le plafond. */
 export async function storageState(env) {
-  const limit = storageLimit(env);
   const used = await usedBytes(env);
+  // Le vrai plafond est le plus petit des deux : celui de l'album, ou ce que
+  // le Drive des mariés peut encore recevoir.
+  const room = await driveRoom(env);
+  let limit = storageLimit(env);
+  if (room != null) {
+    const driveCap = used + Math.max(room, 0);
+    limit = limit ? Math.min(limit, driveCap) : driveCap;
+  }
   return {
     used,
     limit,
